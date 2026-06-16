@@ -42,6 +42,21 @@
           <input type="url" name="privacy_policy_url" class="form-control"
                  value="{{ s.get('privacy_policy_url', '') }}" placeholder="https://example.com/privacy">
         </div>
+        <div class="col-12">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="channelCheckSwitch" name="channel_check_enabled" value="1"
+                   {% if s.get('channel_check_enabled', '1') == '1' %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="channelCheckSwitch">
+              Require channel subscription before image generation
+            </label>
+          </div>
+          <div class="form-text mt-1">
+            When enabled, users must subscribe to the channel above before they can request a photo.
+            The bot must be an <strong>admin</strong> of the channel for the check to work.
+            If disabled, users skip the subscription step entirely.
+          </div>
+        </div>
       </div>
       <div class="mt-3">
         <button type="submit" class="btn btn-primary">Save</button>

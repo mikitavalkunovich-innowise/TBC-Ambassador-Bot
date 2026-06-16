@@ -74,6 +74,7 @@ async def save_bot_settings(
     telegram_channel_id: str = Form(""),
     admin_telegram_user_id: str = Form(""),
     privacy_policy_url: str = Form(""),
+    channel_check_enabled: str = Form("0"),
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
@@ -82,6 +83,7 @@ async def save_bot_settings(
         "telegram_channel_id": telegram_channel_id.strip(),
         "admin_telegram_user_id": admin_telegram_user_id.strip(),
         "privacy_policy_url": privacy_policy_url.strip(),
+        "channel_check_enabled": "1" if channel_check_enabled == "1" else "0",
     })
     return RedirectResponse("/admin/settings?tab=bot&saved=1", status_code=303)
 

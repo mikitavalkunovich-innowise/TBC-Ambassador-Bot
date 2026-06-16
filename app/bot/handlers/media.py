@@ -71,7 +71,7 @@ async def handle_generate_button(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """User pressed 'Generate Image' — check channel subscription first."""
+    """User pressed 'Generate Image' — check channel subscription then proceed."""
     tg_id = callback.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -80,10 +80,15 @@ async def handle_generate_button(
         await callback.answer("Please send /start first.")
         return
 
-    lang = user.language.value if user.language else "ru"
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    # Delegate to subscription check
-    from app.bot.handlers.subscription import send_subscription_prompt
-    await send_subscription_prompt(callback.message, user, session, state)
+    channel_check_enabled = await settings_service.get(session, "channel_check_enabled", "1")
+    if channel_check_enabled == "1":
+        from app.bot.handlers.subscription import send_subscription_prompt
+        await send_subscription_prompt(callback.message, user, session, state)
+    else:
+        # Subscription check is disabled — go straight to photo request
+        from app.bot.handlers.photo import send_photo_request
+        await send_photo_request(callback.message, user, session, state)
+
     await callback.answer()

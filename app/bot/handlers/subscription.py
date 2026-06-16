@@ -23,17 +23,31 @@ logger = logging.getLogger(__name__)
 
 
 async def _is_subscribed(bot: Bot, channel_id: str, user_id: int) -> bool:
-    """Return True if the user is a member of the configured Telegram channel."""
+    """
+    Return True only if the user is a confirmed member of the channel.
+
+    Statuses that count as subscribed: member, administrator, creator, restricted
+    (restricted users are still in the channel).
+    Statuses that mean NOT subscribed: left, kicked, banned.
+
+    On error we return False (fail-closed) so that a misconfigured bot token
+    or missing admin rights does not silently bypass the gate.
+    """
     try:
         member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
         return member.status not in ("left", "kicked", "banned")
     except TelegramBadRequest as e:
-        logger.warning("Could not check membership for user %d in channel %s: %s", user_id, channel_id, e)
-        # If we can't check (e.g. bot not in channel), allow the user through to avoid blocking them
-        return True
+        logger.error(
+            "Subscription check FAILED for user %d in channel %s: %s — "
+            "make sure the bot is an admin of the channel.",
+            user_id, channel_id, e,
+        )
+        return False
     except Exception:
-        logger.exception("Unexpected error checking channel membership")
-        return True
+        logger.exception(
+            "Unexpected error checking channel membership for user %d", user_id
+        )
+        return False
 
 
 async def send_subscription_prompt(

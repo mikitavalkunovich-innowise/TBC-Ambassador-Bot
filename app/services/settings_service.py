@@ -21,6 +21,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "telegram_channel_id": "",
     "admin_telegram_user_id": "",
     "privacy_policy_url": "https://example.com/privacy",
+    # Feature flags
+    "channel_check_enabled": "1",  # "1" = enabled, "0" = disabled
     # Limits
     "max_regeneration_attempts": "3",
     "budget_limit_usd": "100.00",
