@@ -35,17 +35,28 @@ class Settings(BaseSettings):
     debug: bool = False
 
     @model_validator(mode="after")
-    def normalize_database_url(self) -> "Settings":
+    def normalize_urls(self) -> "Settings":
         """
-        Railway provides DATABASE_URL as postgres:// or postgresql://.
-        Normalize to postgresql+asyncpg:// so SQLAlchemy uses asyncpg everywhere.
-        Runs once at settings initialization — no runtime transformation needed.
+        Normalize DATABASE_URL and WEBHOOK_BASE_URL at settings initialization.
+
+        - Railway provides DATABASE_URL as postgres:// or postgresql://; rewrite
+          to postgresql+asyncpg:// so SQLAlchemy always uses the asyncpg driver.
+        - WEBHOOK_BASE_URL may be provided without a scheme (e.g. from Railway's
+          generated domain); prepend https:// automatically.
         """
+        # Database URL
         url = self.database_url
         url = url.replace("postgres://", "postgresql://", 1)
         if "postgresql://" in url and "+asyncpg" not in url:
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         self.database_url = url
+
+        # Webhook base URL — must be HTTPS for Telegram to accept it
+        webhook = self.webhook_base_url.strip()
+        if webhook and "://" not in webhook:
+            webhook = f"https://{webhook}"
+        self.webhook_base_url = webhook
+
         return self
 
     @property

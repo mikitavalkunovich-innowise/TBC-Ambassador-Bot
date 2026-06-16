@@ -47,6 +47,24 @@
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
+
+    <!-- Reinitialize bot section -->
+    <hr class="my-4">
+    <div>
+      <h6 class="fw-semibold mb-1">Bot Initialization</h6>
+      <p class="text-muted small mb-2">
+        After saving the token, click <strong>Reinitialize Bot</strong> to connect without a full service restart.
+        This registers the Telegram webhook and activates the bot immediately.
+      </p>
+      {% if request.query_params.get('error') == 'reinit_failed' %}
+      <div class="alert alert-danger py-2">Reinitialization failed. Check the service logs for details.</div>
+      {% elif request.query_params.get('error') == 'no_token' %}
+      <div class="alert alert-warning py-2">No bot token saved yet. Save the token first.</div>
+      {% endif %}
+      <form method="post" action="/admin/settings/reinit-bot">
+        <button type="submit" class="btn btn-warning">⚡ Reinitialize Bot</button>
+      </form>
+    </div>
   </div>
 </div>
 

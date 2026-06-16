@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import get_current_admin
+from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.storage import generate_filename, save_upload
 from app.services import settings_service
@@ -181,3 +182,42 @@ async def save_media(
         await settings_service.set_many(session, updates)
 
     return RedirectResponse("/admin/settings?tab=media&saved=1", status_code=303)
+
+
+@router.post("/reinit-bot", response_class=RedirectResponse, response_model=None)
+async def reinit_bot(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    """Re-initialize the Telegram bot and re-register webhook without a full restart."""
+    settings = get_settings()
+    bot_token = await settings_service.get(session, "bot_token")
+
+    if not bot_token:
+        return RedirectResponse("/admin/settings?tab=bot&error=no_token", status_code=303)
+
+    try:
+        from app.bot.instance import initialize, shutdown, is_initialized
+
+        # Tear down existing instance if any
+        if is_initialized():
+            await shutdown()
+
+        bot, dp = await initialize(bot_token)
+
+        await bot.set_webhook(
+            url=settings.webhook_url,
+            drop_pending_updates=True,
+        )
+        logger.info("Webhook re-registered: %s", settings.webhook_url)
+
+        # Store references back into app state
+        request.app.state.bot = bot
+        request.app.state.dp = dp
+
+    except Exception:
+        logger.exception("Bot re-initialization failed")
+        return RedirectResponse("/admin/settings?tab=bot&error=reinit_failed", status_code=303)
+
+    return RedirectResponse("/admin/settings?tab=bot&saved=1", status_code=303)
