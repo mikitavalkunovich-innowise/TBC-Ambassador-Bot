@@ -41,6 +41,8 @@ async def initialize(token: str) -> tuple[Bot, Dispatcher]:
     """
     Create and configure the Bot and Dispatcher.
     Called once from app lifespan with the token from DB settings.
+    The Dispatcher and its routers are module-level singletons — call this
+    only once.  For subsequent token/webhook changes use reinit_bot_session().
     """
     global _bot, _dp
 
@@ -60,6 +62,29 @@ async def initialize(token: str) -> tuple[Bot, Dispatcher]:
 
     logger.info("Bot initialized successfully")
     return _bot, _dp
+
+
+async def reinit_bot_session(token: str) -> Bot:
+    """
+    Replace only the Bot client with a new token, keeping the existing
+    Dispatcher and all registered handlers intact.  Safe to call at runtime
+    after the initial startup — avoids the 'Router already attached' error
+    that would occur if we tried to rebuild the full Dispatcher again.
+    """
+    global _bot
+
+    if _bot is not None:
+        try:
+            await _bot.session.close()
+        except Exception:
+            pass
+
+    _bot = Bot(
+        token=token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    logger.info("Bot session reinitialized with new token")
+    return _bot
 
 
 async def set_user_fsm_state(user_telegram_id: int, state: State | None) -> None:

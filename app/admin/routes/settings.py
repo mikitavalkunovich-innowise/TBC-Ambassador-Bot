@@ -190,7 +190,13 @@ async def reinit_bot(
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
-    """Re-initialize the Telegram bot and re-register webhook without a full restart."""
+    """Re-initialize the Telegram bot and re-register webhook without a full restart.
+
+    If the Dispatcher already exists (bot was running before), only the Bot
+    session is replaced so that registered aiogram routers are not re-attached
+    (which would raise RuntimeError).  If the bot was never started, a full
+    initialization is performed.
+    """
     settings = get_settings()
     bot_token = await settings_service.get(session, "bot_token")
 
@@ -198,23 +204,23 @@ async def reinit_bot(
         return RedirectResponse("/admin/settings?tab=bot&error=no_token", status_code=303)
 
     try:
-        from app.bot.instance import initialize, shutdown, is_initialized
+        from app.bot.instance import initialize, reinit_bot_session, is_initialized
 
-        # Tear down existing instance if any
         if is_initialized():
-            await shutdown()
-
-        bot, dp = await initialize(bot_token)
+            # Dispatcher already exists — only replace the Bot session.
+            bot = await reinit_bot_session(bot_token)
+            dp = request.app.state.dp  # keep existing dispatcher
+        else:
+            # First-time init: create both Bot and Dispatcher.
+            bot, dp = await initialize(bot_token)
+            request.app.state.dp = dp
 
         await bot.set_webhook(
             url=settings.webhook_url,
             drop_pending_updates=True,
         )
         logger.info("Webhook re-registered: %s", settings.webhook_url)
-
-        # Store references back into app state
         request.app.state.bot = bot
-        request.app.state.dp = dp
 
     except Exception:
         logger.exception("Bot re-initialization failed")
