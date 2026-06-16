@@ -96,8 +96,7 @@ async def handle_approve(
     max_attempts = int(max_attempts_str)
     attempts_remaining = max_attempts - user.regenerations_used
 
-    # Update user flow status
-    user.flow_status = FlowStatus.DONE if attempts_remaining <= 0 else FlowStatus.DONE
+    user.flow_status = FlowStatus.DONE
     await session.flush()
 
     await track_event(session, user.id, EventType.IMAGE_APPROVED)
@@ -105,21 +104,23 @@ async def handle_approve(
     # Send result to user
     await _send_result_to_user(bot, user, image, approved=True, session=session)
 
+    lang = user.language.value if user.language else "ru"
+
     # Offer regeneration if attempts remain
     if attempts_remaining > 0:
-        from app.bot.handlers.photo import send_regenerate_prompt
-        from aiogram.types import Message
-        # We need to send to the user's chat directly
-        lang = user.language.value if user.language else "ru"
-        text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
         from app.bot.keyboards.builders import regenerate_keyboard
+        from app.bot.instance import set_user_fsm_state
+        from app.bot.states import UserFlow
+
+        text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
         await bot.send_message(
             chat_id=user.telegram_id,
             text=text,
             reply_markup=regenerate_keyboard(lang),
         )
+        # Advance FSM state so the callback keyboard works
+        await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
     else:
-        lang = user.language.value if user.language else "ru"
         no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
         await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text)
         await track_event(session, user.id, EventType.FLOW_COMPLETED)
@@ -179,21 +180,23 @@ async def handle_reject(
     max_attempts = int(max_attempts_str)
     attempts_remaining = max_attempts - user.regenerations_used
 
+    lang = user.language.value if user.language else "ru"
+    user.flow_status = FlowStatus.DONE
+    await session.flush()
+
     if attempts_remaining > 0:
-        lang = user.language.value if user.language else "ru"
-        text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
         from app.bot.keyboards.builders import regenerate_keyboard
-        user.flow_status = FlowStatus.DONE
-        await session.flush()
+        from app.bot.instance import set_user_fsm_state
+        from app.bot.states import UserFlow
+
+        text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
         await bot.send_message(
             chat_id=user.telegram_id,
             text=text,
             reply_markup=regenerate_keyboard(lang),
         )
+        await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
     else:
-        lang = user.language.value if user.language else "ru"
-        user.flow_status = FlowStatus.DONE
-        await session.flush()
         no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
         await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text)
         await track_event(session, user.id, EventType.FLOW_COMPLETED)

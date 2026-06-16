@@ -3,11 +3,17 @@ Singleton holder for the Bot and Dispatcher instances.
 Initialized once during app startup from settings stored in the DB.
 """
 import logging
+from typing import TYPE_CHECKING
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.state import State
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +60,26 @@ async def initialize(token: str) -> tuple[Bot, Dispatcher]:
 
     logger.info("Bot initialized successfully")
     return _bot, _dp
+
+
+async def set_user_fsm_state(user_telegram_id: int, state: State | None) -> None:
+    """
+    Set the FSM state for a user by their Telegram ID.
+    Used when the bot sends a proactive message and needs to advance the user's state
+    (e.g., admin approves an image and we offer the user a 'Generate new' button).
+    """
+    if _bot is None or _dp is None:
+        return
+    try:
+        me = await _bot.get_me()
+        key = StorageKey(
+            bot_id=me.id,
+            chat_id=user_telegram_id,
+            user_id=user_telegram_id,
+        )
+        await _dp.fsm.storage.set_state(key=key, state=state)
+    except Exception:
+        logger.warning("Could not set FSM state for user %d", user_telegram_id)
 
 
 async def shutdown() -> None:

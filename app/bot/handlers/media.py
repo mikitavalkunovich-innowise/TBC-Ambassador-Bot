@@ -50,8 +50,6 @@ async def send_video_message(message: Message, user: User, session: AsyncSession
 
 async def send_generate_prompt(message: Message, lang: str, session: AsyncSession) -> None:
     """Show the 'Generate Image' button to the user."""
-    user_flow_status = FlowStatus.VIDEO_SEEN
-    # Update user status in DB
     result = await session.execute(
         select(User).where(User.telegram_id == message.chat.id)
     )

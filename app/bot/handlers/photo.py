@@ -4,16 +4,15 @@ Handles both first-time photo submission and regeneration requests.
 """
 import logging
 import uuid
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import BufferedInputFile, Message, PhotoSize
+from aiogram.types import CallbackQuery, Message, PhotoSize
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards.builders import regenerate_keyboard
+from app.bot.keyboards.builders import generate_keyboard, regenerate_keyboard
 from app.bot.states import UserFlow
 from app.core.storage import (
     generate_filename,
@@ -79,7 +78,6 @@ async def _check_and_enforce_budget(
         exceeded_msg = await settings_service.get_text(session, "budget_exceeded_message", lang)
 
         # Notify user
-        from aiogram import Bot as AiogramBot
         await bot.send_message(chat_id=user.telegram_id, text=exceeded_msg)
 
         # Notify admin
@@ -240,22 +238,27 @@ async def _run_generation(
 
     except Exception:
         logger.exception("Image generation failed for user %d", user.telegram_id)
-        # Reset user status
+        # Mark generation record as technical failure (not moderation rejection)
+        image_record.status = ImageStatus.REJECTED
+        # Decrement attempt counter so the user keeps their slot
+        user.regenerations_used = max(0, attempt_number - 1)
+        # Reset DB flow status so /start resume works correctly
         user.flow_status = FlowStatus.VIDEO_SEEN
         await session.flush()
-        image_record.status = ImageStatus.REJECTED
-        await session.flush()
 
-        error_text = (
-            "Generation failed. Please try again later."
-            if lang == "ru"
-            else "Yaratish muvaffaqiyatsiz tugadi. Keyinroq urinib ko'ring."
-        )
         try:
             await generating_msg.delete()
         except Exception:
             pass
-        await message.answer(error_text)
+
+        error_text = (
+            "⚠️ Generation failed. Please try again."
+            if lang == "ru"
+            else "⚠️ Yaratish muvaffaqiyatsiz tugadi. Qayta urinib ko'ring."
+        )
+        # Reset FSM state so the generate button works again
+        await state.set_state(UserFlow.awaiting_video_action)
+        await message.answer(error_text, reply_markup=generate_keyboard(lang))
 
 
 @router.message(UserFlow.awaiting_photo, F.photo)
@@ -313,7 +316,7 @@ async def handle_invalid_photo(
 
 @router.callback_query(UserFlow.awaiting_regeneration_input, F.data == "action:regenerate")
 async def handle_regenerate_button(
-    callback: CallbackQuery,  # noqa: F821 (imported via aiogram.types)
+    callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
@@ -358,6 +361,3 @@ async def handle_regeneration_text(
     text = await settings_service.get_text(session, "msg_send_photo", lang)
     await message.answer(text)
 
-
-# Import needed for callback_query type hint in the regenerate handler
-from aiogram.types import CallbackQuery  # noqa: E402
