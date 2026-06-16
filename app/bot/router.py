@@ -9,6 +9,7 @@ from app.bot.handlers import (
     privacy,
     start,
     subscription,
+    utils,
 )
 
 
@@ -16,6 +17,9 @@ def setup_dispatcher(dp: Dispatcher) -> None:
     """Register all routers in the correct priority order."""
     # Admin callbacks must be checked first (they have no FSM state guard)
     dp.include_router(admin_notify.router)
+
+    # Utility commands (e.g. /myid) — before user-flow routers so they always respond
+    dp.include_router(utils.router)
 
     # User flow routers
     dp.include_router(start.router)

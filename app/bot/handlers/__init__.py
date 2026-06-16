@@ -6,6 +6,7 @@ from app.bot.handlers import (
     privacy,
     start,
     subscription,
+    utils,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "privacy",
     "start",
     "subscription",
+    "utils",
 ]

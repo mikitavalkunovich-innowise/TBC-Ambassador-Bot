@@ -35,7 +35,14 @@
           <label class="form-label fw-semibold">Admin Telegram User ID</label>
           <input type="text" name="admin_telegram_user_id" class="form-control"
                  value="{{ s.get('admin_telegram_user_id', '') }}" placeholder="123456789">
-          <div class="form-text">Receives moderation notifications and budget alerts.</div>
+          <div class="form-text">
+            Receives moderation notifications and budget alerts.<br>
+            <strong>Don't know your ID?</strong>
+            Open the bot and send <code>/myid</code> — it will reply with your numeric ID.
+            Alternatively, message
+            <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>
+            on Telegram.
+          </div>
         </div>
         <div class="col-12">
           <label class="form-label fw-semibold">Privacy Policy URL</label>
