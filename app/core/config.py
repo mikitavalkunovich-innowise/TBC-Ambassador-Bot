@@ -41,6 +41,21 @@ class Settings(BaseSettings):
     def webhook_url(self) -> str:
         return f"{self.webhook_base_url.rstrip('/')}/bot/webhook"
 
+    @property
+    def database_url_async(self) -> str:
+        """
+        Return the database URL with the asyncpg driver.
+        Railway provides DATABASE_URL as postgres:// or postgresql://
+        without the +asyncpg driver suffix — normalize it here.
+        """
+        url = self.database_url
+        # Railway sometimes uses the legacy postgres:// scheme
+        url = url.replace("postgres://", "postgresql://", 1)
+        # Inject +asyncpg if the driver is not already specified
+        if "postgresql://" in url and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
 
 @lru_cache
 def get_settings() -> Settings:
