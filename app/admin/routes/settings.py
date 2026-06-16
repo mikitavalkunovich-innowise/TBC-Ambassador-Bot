@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.admin.auth import get_current_admin
 from app.core.config import get_settings
 from app.core.database import get_db_session
-from app.core.storage import generate_filename, save_upload
+from app.core.storage import generate_filename, get_absolute_path, save_upload
 from app.services import settings_service
 
 router = APIRouter()
@@ -188,9 +188,8 @@ async def save_media(
         if data:
             fn = generate_filename(frame_ru.filename)
             rel = await save_upload(data, "frames", fn)
-            # Store the absolute path so image_service can find it even when
-            # the app is running with a different working directory.
-            from app.core.storage import get_absolute_path
+            # Store the absolute path so image_service can find it regardless
+            # of the process working directory.
             updates["frame_path_ru"] = str(get_absolute_path(rel))
 
     if frame_uz and frame_uz.filename:
@@ -198,7 +197,6 @@ async def save_media(
         if data:
             fn = generate_filename(frame_uz.filename)
             rel = await save_upload(data, "frames", fn)
-            from app.core.storage import get_absolute_path
             updates["frame_path_uz"] = str(get_absolute_path(rel))
 
     if updates:
