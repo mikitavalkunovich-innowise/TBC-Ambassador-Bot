@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — TBC Admin{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="mb-0 fw-bold">Dashboard</h4>
+  <a href="/admin/analytics/export/csv" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-download me-1"></i>Export CSV
+  </a>
+</div>
+
+<!-- Users row -->
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card primary h-100">
+      <div class="card-body">
+        <div class="text-muted small">Total Users</div>
+        <div class="fs-3 fw-bold">{{ stats.total_users }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card success h-100">
+      <div class="card-body">
+        <div class="text-muted small">Completed Flow</div>
+        <div class="fs-3 fw-bold">{{ stats.users_completed }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card primary h-100">
+      <div class="card-body">
+        <div class="text-muted small">Language — RU</div>
+        <div class="fs-3 fw-bold">{{ stats.users_ru }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card warning h-100">
+      <div class="card-body">
+        <div class="text-muted small">Language — UZ</div>
+        <div class="fs-3 fw-bold">{{ stats.users_uz }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Images row -->
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card primary h-100">
+      <div class="card-body">
+        <div class="text-muted small">Images Generated</div>
+        <div class="fs-3 fw-bold">{{ stats.images_generated }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card warning h-100">
+      <div class="card-body">
+        <div class="text-muted small">
+          Pending
+          <a href="/admin/moderation" class="ms-1 text-warning"><i class="bi bi-arrow-right-circle"></i></a>
+        </div>
+        <div class="fs-3 fw-bold">{{ stats.images_pending }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card success h-100">
+      <div class="card-body">
+        <div class="text-muted small">Approved</div>
+        <div class="fs-3 fw-bold">{{ stats.images_approved }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-card danger h-100">
+      <div class="card-body">
+        <div class="text-muted small">Rejected</div>
+        <div class="fs-3 fw-bold">{{ stats.images_rejected }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Budget card -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div>
+        <h6 class="mb-0">AI Generation Budget</h6>
+        <small class="text-muted">Gemini 3 Pro Image (gemini-3-pro-image)</small>
+      </div>
+      <a href="/admin/settings?tab=limits" class="btn btn-outline-secondary btn-sm">Edit Limit</a>
+    </div>
+    <div class="row g-3 align-items-center">
+      <div class="col-md-8">
+        <div class="progress" style="height: 12px;">
+          <div class="progress-bar {% if stats.budget_percent >= 90 %}bg-danger{% elif stats.budget_percent >= 70 %}bg-warning{% else %}bg-success{% endif %}"
+               role="progressbar" style="width: {{ [stats.budget_percent, 100]|min }}%"></div>
+        </div>
+        <small class="text-muted">{{ stats.budget_percent }}% used</small>
+      </div>
+      <div class="col-md-4 text-md-end">
+        <span class="fw-bold">${{ stats.budget_spent_usd }}</span>
+        <span class="text-muted"> / ${{ stats.budget_limit_usd }}</span>
+      </div>
+    </div>
+    <div class="mt-2">
+      <span class="text-muted small">Total cost tracked in DB: </span>
+      <strong>${{ stats.total_cost_usd }}</strong>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

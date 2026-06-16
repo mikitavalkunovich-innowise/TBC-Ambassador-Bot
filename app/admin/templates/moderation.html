@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Moderation — TBC Admin{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="fw-bold mb-0">Moderation Queue</h4>
+  <div class="btn-group" role="group">
+    {% for sf, sf_label in [('pending','Pending'), ('approved','Approved'), ('rejected','Rejected')] %}
+    <a href="/admin/moderation?status_filter={{ sf }}"
+       class="btn btn-sm {% if status_filter == sf %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+       {{ sf_label }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if not items %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+  No images in this queue.
+</div>
+{% else %}
+<div class="row g-3">
+  {% for item in items %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100 shadow-sm">
+      <!-- Generated image -->
+      {% if item.image_url %}
+      <a href="{{ item.image_url }}" target="_blank">
+        <img src="{{ item.image_url }}" class="card-img-top" alt="Generated"
+             style="max-height: 240px; object-fit: cover;">
+      </a>
+      {% else %}
+      <div class="card-img-top bg-secondary d-flex align-items-center justify-content-center" style="height:120px;">
+        <span class="text-white small">No image</span>
+      </div>
+      {% endif %}
+
+      <div class="card-body p-3">
+        <!-- User info -->
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            {% if item.user.telegram_username %}
+            <span class="fw-semibold">@{{ item.user.telegram_username }}</span>
+            {% else %}
+            <span class="fw-semibold">ID: {{ item.user.telegram_id }}</span>
+            {% endif %}
+            <br>
+            <small class="text-muted">{{ item.user.language | upper }} · Attempt {{ item.attempt_number }}</small>
+          </div>
+          <span class="badge badge-{{ item.status }}">{{ item.status }}</span>
+        </div>
+
+        <!-- User photo thumbnail -->
+        {% if item.user_photo_url %}
+        <div class="mb-2">
+          <small class="text-muted">User's selfie:</small><br>
+          <a href="{{ item.user_photo_url }}" target="_blank">
+            <img src="{{ item.user_photo_url }}" class="img-thumbnail" style="max-height:60px;">
+          </a>
+        </div>
+        {% endif %}
+
+        {% if item.user_prompt_extra %}
+        <div class="mb-2">
+          <small class="text-muted">Extra prompt:</small>
+          <p class="mb-0 small fst-italic">{{ item.user_prompt_extra }}</p>
+        </div>
+        {% endif %}
+
+        {% if item.cost_usd %}
+        <small class="text-muted">Cost: ${{ "%.4f" | format(item.cost_usd) }}</small>
+        {% endif %}
+
+        {% if item.created_at %}
+        <br><small class="text-muted">{{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        {% endif %}
+      </div>
+
+      <!-- Actions -->
+      {% if item.status == 'pending' %}
+      <div class="card-footer d-flex gap-2 p-2">
+        <form method="post" action="/admin/moderation/{{ item.id }}/approve" class="flex-fill">
+          <button type="submit" class="btn btn-success btn-sm w-100">
+            <i class="bi bi-check-lg me-1"></i>Approve
+          </button>
+        </form>
+        <form method="post" action="/admin/moderation/{{ item.id }}/reject" class="flex-fill"
+              onsubmit="return confirm('Reject this image?')">
+          <button type="submit" class="btn btn-danger btn-sm w-100">
+            <i class="bi bi-x-lg me-1"></i>Reject
+          </button>
+        </form>
+      </div>
+      {% else %}
+      <div class="card-footer p-2">
+        {% if item.reviewed_at %}
+        <small class="text-muted">Reviewed: {{ item.reviewed_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

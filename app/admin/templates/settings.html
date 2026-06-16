@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Settings — TBC Admin{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4">Settings</h4>
+
+<!-- Tab navigation -->
+<ul class="nav nav-tabs mb-4" id="settingsTabs">
+  {% for tab_id, tab_label in [('bot','Bot & Channel'), ('media','Media'), ('messages','Messages'), ('limits','Limits')] %}
+  <li class="nav-item">
+    <a class="nav-link {% if active_tab == tab_id %}active{% endif %}"
+       href="/admin/settings?tab={{ tab_id }}">{{ tab_label }}</a>
+  </li>
+  {% endfor %}
+</ul>
+
+<!-- BOT TAB -->
+{% if active_tab == 'bot' %}
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="/admin/settings/bot">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label fw-semibold">Bot Token <span class="text-danger">*</span></label>
+          <input type="password" name="bot_token" class="form-control font-monospace"
+                 value="{{ s.get('bot_token', '') }}" placeholder="123456:ABC-DEF...">
+          <div class="form-text">Changing the token requires a service restart to take effect.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Telegram Channel ID</label>
+          <input type="text" name="telegram_channel_id" class="form-control"
+                 value="{{ s.get('telegram_channel_id', '') }}" placeholder="@mychannel or -100123456789">
+          <div class="form-text">Used to verify channel subscription. Bot must be an admin of the channel.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Admin Telegram User ID</label>
+          <input type="text" name="admin_telegram_user_id" class="form-control"
+                 value="{{ s.get('admin_telegram_user_id', '') }}" placeholder="123456789">
+          <div class="form-text">Receives moderation notifications and budget alerts.</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-semibold">Privacy Policy URL</label>
+          <input type="url" name="privacy_policy_url" class="form-control"
+                 value="{{ s.get('privacy_policy_url', '') }}" placeholder="https://example.com/privacy">
+        </div>
+      </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MEDIA TAB -->
+{% elif active_tab == 'media' %}
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="/admin/settings/media" enctype="multipart/form-data">
+      <div class="row g-4">
+        <!-- Ambassador photo -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Ambassador Photo</label>
+          {% if s.get('ambassador_photo_path') %}
+          <div class="mb-2">
+            <img src="/media/{{ s.get('ambassador_photo_path') }}" alt="Ambassador" class="img-thumbnail" style="max-height:120px;">
+          </div>
+          {% endif %}
+          <input type="file" name="ambassador_photo" class="form-control" accept="image/*">
+          <div class="form-text">Used as the second person in the generated composite photo.</div>
+        </div>
+        <!-- TBC Logo -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">TBC Logo (Watermark)</label>
+          {% if s.get('logo_path') %}
+          <div class="mb-2">
+            <img src="/media/{{ s.get('logo_path') }}" alt="Logo" class="img-thumbnail" style="max-height:80px;">
+          </div>
+          {% endif %}
+          <input type="file" name="logo" class="form-control" accept="image/*">
+          <div class="form-text">Placed in the top-right corner of every generated image.</div>
+        </div>
+        <!-- Video RU -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Video (Russian) — URL</label>
+          <input type="url" name="video_url_ru" class="form-control"
+                 value="{{ s.get('video_url_ru', '') }}" placeholder="https://...">
+          <label class="form-label mt-2">or Upload File</label>
+          <input type="file" name="video_file_ru" class="form-control" accept="video/*">
+          {% if s.get('video_path_ru') %}
+          <div class="form-text text-success"><i class="bi bi-check-circle"></i> File uploaded: {{ s.get('video_path_ru') }}</div>
+          {% endif %}
+        </div>
+        <!-- Video UZ -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Video (Uzbek) — URL</label>
+          <input type="url" name="video_url_uz" class="form-control"
+                 value="{{ s.get('video_url_uz', '') }}" placeholder="https://...">
+          <label class="form-label mt-2">or Upload File</label>
+          <input type="file" name="video_file_uz" class="form-control" accept="video/*">
+          {% if s.get('video_path_uz') %}
+          <div class="form-text text-success"><i class="bi bi-check-circle"></i> File uploaded: {{ s.get('video_path_uz') }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MESSAGES TAB -->
+{% elif active_tab == 'messages' %}
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="/admin/settings/messages">
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Image Generation Prompt (English)</label>
+        <textarea name="generation_prompt" class="form-control font-monospace" rows="5">{{ s.get('generation_prompt', '') }}</textarea>
+        <div class="form-text">Use <code>{extra}</code> as placeholder for user's additional instructions.</div>
+      </div>
+      <hr>
+      <p class="text-muted small mb-3">
+        Message placeholders: <code>{privacy_url}</code>, <code>{channel_link}</code>
+      </p>
+      <div class="row g-3">
+        {% for pair in message_pairs %}
+        <div class="col-12">
+          <div class="fw-semibold small mb-1">{{ pair.label }}</div>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small text-muted">🇷🇺 Russian</label>
+              <textarea name="{{ pair.key }}_ru" class="form-control form-control-sm" rows="2">{{ pair.value_ru or '' }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-muted">🇺🇿 Uzbek</label>
+              <textarea name="{{ pair.key }}_uz" class="form-control form-control-sm" rows="2">{{ pair.value_uz or '' }}</textarea>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary">Save All Messages</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- LIMITS TAB -->
+{% elif active_tab == 'limits' %}
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Generation Limits</div>
+      <div class="card-body">
+        <form method="post" action="/admin/settings/limits">
+          <div class="mb-3">
+            <label class="form-label">Max Regeneration Attempts per User</label>
+            <input type="number" name="max_regeneration_attempts" class="form-control"
+                   value="{{ s.get('max_regeneration_attempts', '3') }}" min="1" max="10">
+            <div class="form-text">How many times a user can generate a new image (including the first).</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Budget Limit (USD)</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" name="budget_limit_usd" class="form-control"
+                     value="{{ s.get('budget_limit_usd', '100.00') }}" step="0.01" min="0">
+            </div>
+            <div class="form-text">Set to 0 to disable budget enforcement.</div>
+          </div>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Budget Status</div>
+      <div class="card-body">
+        <dl class="row mb-3">
+          <dt class="col-6">Limit:</dt>
+          <dd class="col-6">${{ s.get('budget_limit_usd', '0') }}</dd>
+          <dt class="col-6">Spent:</dt>
+          <dd class="col-6">${{ s.get('budget_spent_usd', '0') }}</dd>
+        </dl>
+        <form method="post" action="/admin/settings/reset-budget"
+              onsubmit="return confirm('Reset budget counter to $0?')">
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Budget Counter
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
