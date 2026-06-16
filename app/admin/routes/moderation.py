@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -144,9 +144,12 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
         if attempts_remaining > 0:
-            text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
+            from app.bot.instance import set_user_fsm_state
             from app.bot.keyboards.builders import regenerate_keyboard
+            from app.bot.states import UserFlow
             from app.models.user import FlowStatus
+
+            text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
             user.flow_status = FlowStatus.DONE
             await session.flush()
             await bot.send_message(
@@ -154,6 +157,7 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
                 text=text,
                 reply_markup=regenerate_keyboard(lang),
             )
+            await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
 
         from app.core.config import get_settings
         config = get_settings()
@@ -185,9 +189,12 @@ async def _notify_user_rejected(image: GeneratedImage, user: User, session: Asyn
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
         if attempts_remaining > 0:
-            text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
+            from app.bot.instance import set_user_fsm_state
             from app.bot.keyboards.builders import regenerate_keyboard
+            from app.bot.states import UserFlow
             from app.models.user import FlowStatus
+
+            text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
             user.flow_status = FlowStatus.DONE
             await session.flush()
             await bot.send_message(
@@ -195,6 +202,7 @@ async def _notify_user_rejected(image: GeneratedImage, user: User, session: Asyn
                 text=text,
                 reply_markup=regenerate_keyboard(lang),
             )
+            await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
 
         from app.core.config import get_settings
         config = get_settings()
