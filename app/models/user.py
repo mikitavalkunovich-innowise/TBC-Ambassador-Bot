@@ -34,11 +34,14 @@ class User(Base, TimestampMixin):
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
     telegram_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     telegram_first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    language: Mapped[Language | None] = mapped_column(Enum(Language), nullable=True)
+    language: Mapped[Language | None] = mapped_column(
+        Enum(Language, values_callable=lambda x: [e.value for e in x]),
+        nullable=True,
+    )
     privacy_accepted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     channel_subscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     flow_status: Mapped[FlowStatus] = mapped_column(
-        Enum(FlowStatus),
+        Enum(FlowStatus, values_callable=lambda x: [e.value for e in x]),
         default=FlowStatus.STARTED,
         nullable=False,
     )

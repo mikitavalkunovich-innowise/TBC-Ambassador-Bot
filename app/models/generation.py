@@ -38,7 +38,7 @@ class GeneratedImage(Base, TimestampMixin):
     user_photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     status: Mapped[ImageStatus] = mapped_column(
-        Enum(ImageStatus),
+        Enum(ImageStatus, values_callable=lambda x: [e.value for e in x]),
         default=ImageStatus.PENDING,
         nullable=False,
         index=True,
