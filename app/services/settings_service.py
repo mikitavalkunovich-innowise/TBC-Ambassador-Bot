@@ -34,6 +34,11 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "video_url_uz": "",
     "video_path_ru": "",
     "video_path_uz": "",
+    # Instagram frame templates (portrait format).
+    # Default values point to the bundled static frames shipped with the app.
+    # Admins can override by uploading custom frames via the Media settings tab.
+    "frame_path_ru": "frame_ru.png",
+    "frame_path_uz": "frame_uz.png",
     # Image generation prompt template
     "generation_prompt": (
         "Create a natural, realistic photo that looks like it was taken with an iPhone 16. "

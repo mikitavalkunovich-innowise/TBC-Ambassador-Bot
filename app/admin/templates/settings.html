@@ -133,6 +133,48 @@
           <div class="form-text text-success"><i class="bi bi-check-circle"></i> File uploaded: {{ s.get('video_path_uz') }}</div>
           {% endif %}
         </div>
+
+        <!-- ─── Instagram Frame Templates ─── -->
+        <div class="col-12">
+          <hr class="my-1">
+          <h6 class="fw-semibold mb-3">Instagram Frame Templates</h6>
+          <p class="text-muted small mb-3">
+            The generated photo is automatically embedded into the white area of the selected frame.
+            Default frames are bundled with the app (<code>frame_ru.png</code> / <code>frame_uz.png</code>).
+            Upload new frames here to override the defaults.
+          </p>
+        </div>
+        <!-- Frame RU -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Frame — Russian 🇷🇺</label>
+          {% set frame_ru_val = s.get('frame_path_ru', '') %}
+          {% if frame_ru_val and frame_ru_val.startswith('/') %}
+          <div class="mb-2">
+            <img src="/media/{{ frame_ru_val.split('/uploads/')[-1] if '/uploads/' in frame_ru_val else '' }}"
+                 alt="Frame RU" class="img-thumbnail" style="max-height:160px;">
+          </div>
+          {% elif not frame_ru_val or frame_ru_val in ('frame_ru.png',) %}
+          <div class="mb-2 text-muted small"><i class="bi bi-image"></i> Using default bundled frame (#МечтаемВсейСтраной)</div>
+          {% endif %}
+          <input type="file" name="frame_ru" class="form-control" accept="image/png,image/jpeg">
+          <div class="form-text">Portrait PNG/JPG with a white rectangular area for the generated photo.</div>
+        </div>
+        <!-- Frame UZ -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Frame — Uzbek 🇺🇿</label>
+          {% set frame_uz_val = s.get('frame_path_uz', '') %}
+          {% if frame_uz_val and frame_uz_val.startswith('/') %}
+          <div class="mb-2">
+            <img src="/media/{{ frame_uz_val.split('/uploads/')[-1] if '/uploads/' in frame_uz_val else '' }}"
+                 alt="Frame UZ" class="img-thumbnail" style="max-height:160px;">
+          </div>
+          {% elif not frame_uz_val or frame_uz_val in ('frame_uz.png',) %}
+          <div class="mb-2 text-muted small"><i class="bi bi-image"></i> Using default bundled frame (#BirgalikdaOrzuQilamiz)</div>
+          {% endif %}
+          <input type="file" name="frame_uz" class="form-control" accept="image/png,image/jpeg">
+          <div class="form-text">Portrait PNG/JPG with a white rectangular area for the generated photo.</div>
+        </div>
+
       </div>
       <div class="mt-3">
         <button type="submit" class="btn btn-primary">Save</button>

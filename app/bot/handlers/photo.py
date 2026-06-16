@@ -25,7 +25,10 @@ from app.models.user import FlowStatus, User
 from app.services import settings_service
 from app.services.ai_service import generate_composite_photo
 from app.services.analytics_service import track_event
-from app.services.image_service import add_logo_watermark_if_available
+from app.services.image_service import (
+    add_logo_watermark_if_available,
+    composite_into_frame_if_available,
+)
 from app.services.notify_service import notify_budget_exceeded, notify_new_image
 
 router = Router(name="photo")
@@ -169,10 +172,14 @@ async def _run_generation(
             extra_prompt=extra_prompt,
         )
 
-        # Apply watermark
-        logo_path_rel = await settings_service.get(session, "logo_path")
-        logo_abs = str(get_absolute_path(logo_path_rel)) if logo_path_rel else None
-        final_image = add_logo_watermark_if_available(result.image_bytes, logo_abs)
+        # Apply Instagram frame if configured, otherwise fall back to logo watermark
+        frame_path_rel = await settings_service.get(session, f"frame_path_{lang}")
+        if frame_path_rel:
+            final_image = composite_into_frame_if_available(result.image_bytes, frame_path_rel)
+        else:
+            logo_path_rel = await settings_service.get(session, "logo_path")
+            logo_abs = str(get_absolute_path(logo_path_rel)) if logo_path_rel else None
+            final_image = add_logo_watermark_if_available(result.image_bytes, logo_abs)
 
         # Save generated image
         gen_filename = generate_filename("generated.jpg")

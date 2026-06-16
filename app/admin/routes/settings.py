@@ -140,6 +140,8 @@ async def save_media(
     logo: UploadFile | None = File(None),
     video_file_ru: UploadFile | None = File(None),
     video_file_uz: UploadFile | None = File(None),
+    frame_ru: UploadFile | None = File(None),
+    frame_uz: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
@@ -179,6 +181,25 @@ async def save_media(
             rel = await save_upload(data, "videos", fn)
             updates["video_path_uz"] = rel
             updates["video_url_uz"] = ""
+
+    # Instagram frame templates — stored as absolute paths in the upload volume
+    if frame_ru and frame_ru.filename:
+        data = await frame_ru.read()
+        if data:
+            fn = generate_filename(frame_ru.filename)
+            rel = await save_upload(data, "frames", fn)
+            # Store the absolute path so image_service can find it even when
+            # the app is running with a different working directory.
+            from app.core.storage import get_absolute_path
+            updates["frame_path_ru"] = str(get_absolute_path(rel))
+
+    if frame_uz and frame_uz.filename:
+        data = await frame_uz.read()
+        if data:
+            fn = generate_filename(frame_uz.filename)
+            rel = await save_upload(data, "frames", fn)
+            from app.core.storage import get_absolute_path
+            updates["frame_path_uz"] = str(get_absolute_path(rel))
 
     if updates:
         await settings_service.set_many(session, updates)
