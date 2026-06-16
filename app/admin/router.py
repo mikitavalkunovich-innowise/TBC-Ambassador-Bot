@@ -12,7 +12,7 @@ templates = Jinja2Templates(directory="app/admin/templates")
 
 # --- Auth routes ---
 
-@router.get("/login", response_class=HTMLResponse)
+@router.get("/login", response_class=HTMLResponse, response_model=None)
 async def login_page(request: Request) -> HTMLResponse:
     # If already logged in, redirect to dashboard
     token = request.cookies.get("tbc_admin_session")
@@ -21,7 +21,7 @@ async def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("login.html", {"request": request, "error": None})
 
 
-@router.post("/login")
+@router.post("/login", response_model=None)
 async def login(
     request: Request,
     username: str = Form(...),
@@ -38,7 +38,7 @@ async def login(
     )
 
 
-@router.get("/logout")
+@router.get("/logout", response_model=None)
 async def logout() -> RedirectResponse:
     response = RedirectResponse("/admin/login", status_code=303)
     destroy_session(response)

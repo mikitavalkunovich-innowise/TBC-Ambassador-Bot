@@ -11,7 +11,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/admin/templates")
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, response_model=None)
 async def dashboard(
     request: Request,
     session: AsyncSession = Depends(get_db_session),

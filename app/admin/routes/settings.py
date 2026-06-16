@@ -36,7 +36,7 @@ MESSAGE_KEYS = [
 ]
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, response_model=None)
 async def settings_page(
     request: Request,
     tab: str = "bot",
@@ -66,7 +66,7 @@ async def settings_page(
     )
 
 
-@router.post("/bot", response_class=RedirectResponse)
+@router.post("/bot", response_class=RedirectResponse, response_model=None)
 async def save_bot_settings(
     request: Request,
     bot_token: str = Form(""),
@@ -85,7 +85,7 @@ async def save_bot_settings(
     return RedirectResponse("/admin/settings?tab=bot&saved=1", status_code=303)
 
 
-@router.post("/limits", response_class=RedirectResponse)
+@router.post("/limits", response_class=RedirectResponse, response_model=None)
 async def save_limits(
     max_regeneration_attempts: str = Form("3"),
     budget_limit_usd: str = Form("100.00"),
@@ -99,7 +99,7 @@ async def save_limits(
     return RedirectResponse("/admin/settings?tab=limits&saved=1", status_code=303)
 
 
-@router.post("/reset-budget", response_class=RedirectResponse)
+@router.post("/reset-budget", response_class=RedirectResponse, response_model=None)
 async def reset_budget(
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
@@ -108,7 +108,7 @@ async def reset_budget(
     return RedirectResponse("/admin/settings?tab=limits&saved=1", status_code=303)
 
 
-@router.post("/messages", response_class=RedirectResponse)
+@router.post("/messages", response_class=RedirectResponse, response_model=None)
 async def save_messages(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
@@ -128,7 +128,7 @@ async def save_messages(
     return RedirectResponse("/admin/settings?tab=messages&saved=1", status_code=303)
 
 
-@router.post("/media", response_class=RedirectResponse)
+@router.post("/media", response_class=RedirectResponse, response_model=None)
 async def save_media(
     request: Request,
     video_url_ru: str = Form(""),

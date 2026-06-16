@@ -12,7 +12,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/admin/templates")
 
 
-@router.get("/export/csv")
+@router.get("/export/csv", response_model=None)
 async def export_analytics_csv(
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),

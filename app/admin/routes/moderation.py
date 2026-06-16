@@ -27,7 +27,7 @@ templates = Jinja2Templates(directory="app/admin/templates")
 logger = logging.getLogger(__name__)
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, response_model=None)
 async def moderation_list(
     request: Request,
     status_filter: str = "pending",
@@ -78,7 +78,7 @@ async def moderation_list(
     )
 
 
-@router.post("/{image_id}/approve", response_class=RedirectResponse)
+@router.post("/{image_id}/approve", response_class=RedirectResponse, response_model=None)
 async def approve_image(
     image_id: str,
     session: AsyncSession = Depends(get_db_session),
@@ -98,7 +98,7 @@ async def approve_image(
     return RedirectResponse("/admin/moderation?status_filter=pending", status_code=303)
 
 
-@router.post("/{image_id}/reject", response_class=RedirectResponse)
+@router.post("/{image_id}/reject", response_class=RedirectResponse, response_model=None)
 async def reject_image(
     image_id: str,
     session: AsyncSession = Depends(get_db_session),
