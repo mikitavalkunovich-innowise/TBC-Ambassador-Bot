@@ -53,7 +53,7 @@
                    id="privacyLinkSwitch" name="privacy_policy_link_enabled" value="1"
                    {% if s.get('privacy_policy_link_enabled', '0') == '1' %}checked{% endif %}>
             <label class="form-check-label fw-semibold" for="privacyLinkSwitch">
-              Show «Ознакомиться» button on the disclaimer screen
+              Show "Read policy" button on the disclaimer screen
             </label>
           </div>
           <div class="form-text">
@@ -117,19 +117,13 @@
             <img src="/media/{{ s.get('ambassador_photo_path') }}" alt="Ambassador" class="img-thumbnail" style="max-height:120px;">
           </div>
           {% endif %}
-          <input type="file" name="ambassador_photo" class="form-control" accept="image/*">
-          <div class="form-text">Used as the second person in the generated composite photo.</div>
-        </div>
-        <!-- TBC Logo -->
-        <div class="col-md-6">
-          <label class="form-label fw-semibold">TBC Logo (Watermark)</label>
-          {% if s.get('logo_path') %}
-          <div class="mb-2">
-            <img src="/media/{{ s.get('logo_path') }}" alt="Logo" class="img-thumbnail" style="max-height:80px;">
+          <div class="file-upload-en">
+            <input type="file" class="d-none file-input-native" id="file_ambassador_photo"
+                   name="ambassador_photo" accept="image/*">
+            <label for="file_ambassador_photo" class="btn btn-outline-secondary btn-sm">Choose file</label>
+            <span class="ms-2 text-muted small file-input-name">No file selected</span>
           </div>
-          {% endif %}
-          <input type="file" name="logo" class="form-control" accept="image/*">
-          <div class="form-text">Placed in the top-right corner of every generated image.</div>
+          <div class="form-text">Used as the second person in the generated composite photo.</div>
         </div>
         <!-- Video toggle -->
         <div class="col-12">
@@ -153,7 +147,12 @@
           <input type="url" name="video_url_ru" class="form-control"
                  value="{{ s.get('video_url_ru', '') }}" placeholder="https://...">
           <label class="form-label mt-2">or Upload File</label>
-          <input type="file" name="video_file_ru" class="form-control" accept="video/*">
+          <div class="file-upload-en">
+            <input type="file" class="d-none file-input-native" id="file_video_ru"
+                   name="video_file_ru" accept="video/*">
+            <label for="file_video_ru" class="btn btn-outline-secondary btn-sm">Choose file</label>
+            <span class="ms-2 text-muted small file-input-name">No file selected</span>
+          </div>
           {% if s.get('video_path_ru') %}
           <div class="form-text text-success"><i class="bi bi-check-circle"></i> File uploaded: {{ s.get('video_path_ru') }}</div>
           {% endif %}
@@ -164,7 +163,12 @@
           <input type="url" name="video_url_uz" class="form-control"
                  value="{{ s.get('video_url_uz', '') }}" placeholder="https://...">
           <label class="form-label mt-2">or Upload File</label>
-          <input type="file" name="video_file_uz" class="form-control" accept="video/*">
+          <div class="file-upload-en">
+            <input type="file" class="d-none file-input-native" id="file_video_uz"
+                   name="video_file_uz" accept="video/*">
+            <label for="file_video_uz" class="btn btn-outline-secondary btn-sm">Choose file</label>
+            <span class="ms-2 text-muted small file-input-name">No file selected</span>
+          </div>
           {% if s.get('video_path_uz') %}
           <div class="form-text text-success"><i class="bi bi-check-circle"></i> File uploaded: {{ s.get('video_path_uz') }}</div>
           {% endif %}
@@ -190,9 +194,14 @@
                  alt="Frame RU" class="img-thumbnail" style="max-height:160px;">
           </div>
           {% elif not frame_ru_val or frame_ru_val in ('frame_ru.png',) %}
-          <div class="mb-2 text-muted small"><i class="bi bi-image"></i> Using default bundled frame (#МечтаемВсейСтраной)</div>
+          <div class="mb-2 text-muted small"><i class="bi bi-image"></i> Using default bundled frame</div>
           {% endif %}
-          <input type="file" name="frame_ru" class="form-control" accept="image/png,image/jpeg">
+          <div class="file-upload-en">
+            <input type="file" class="d-none file-input-native" id="file_frame_ru"
+                   name="frame_ru" accept="image/png,image/jpeg">
+            <label for="file_frame_ru" class="btn btn-outline-secondary btn-sm">Choose file</label>
+            <span class="ms-2 text-muted small file-input-name">No file selected</span>
+          </div>
           <div class="form-text">Portrait PNG/JPG with a white rectangular area for the generated photo.</div>
         </div>
         <!-- Frame UZ -->
@@ -205,9 +214,14 @@
                  alt="Frame UZ" class="img-thumbnail" style="max-height:160px;">
           </div>
           {% elif not frame_uz_val or frame_uz_val in ('frame_uz.png',) %}
-          <div class="mb-2 text-muted small"><i class="bi bi-image"></i> Using default bundled frame (#BirgalikdaOrzuQilamiz)</div>
+          <div class="mb-2 text-muted small"><i class="bi bi-image"></i> Using default bundled frame</div>
           {% endif %}
-          <input type="file" name="frame_uz" class="form-control" accept="image/png,image/jpeg">
+          <div class="file-upload-en">
+            <input type="file" class="d-none file-input-native" id="file_frame_uz"
+                   name="frame_uz" accept="image/png,image/jpeg">
+            <label for="file_frame_uz" class="btn btn-outline-secondary btn-sm">Choose file</label>
+            <span class="ms-2 text-muted small file-input-name">No file selected</span>
+          </div>
           <div class="form-text">Portrait PNG/JPG with a white rectangular area for the generated photo.</div>
         </div>
 
@@ -218,6 +232,16 @@
     </form>
   </div>
 </div>
+<script>
+  document.querySelectorAll('.file-upload-en .file-input-native').forEach(function (input) {
+    input.addEventListener('change', function () {
+      var nameEl = input.closest('.file-upload-en').querySelector('.file-input-name');
+      if (nameEl) {
+        nameEl.textContent = input.files.length ? input.files[0].name : 'No file selected';
+      }
+    });
+  });
+</script>
 
 <!-- MESSAGES TAB -->
 {% elif active_tab == 'messages' %}
@@ -240,11 +264,21 @@
           <div class="row g-2">
             <div class="col-md-6">
               <label class="form-label small text-muted">🇷🇺 Russian</label>
+              {% if pair.is_button %}
+              <input type="text" name="{{ pair.key }}_ru" class="form-control form-control-sm"
+                     value="{{ pair.value_ru or '' }}">
+              {% else %}
               <textarea name="{{ pair.key }}_ru" class="form-control form-control-sm" rows="2">{{ pair.value_ru or '' }}</textarea>
+              {% endif %}
             </div>
             <div class="col-md-6">
               <label class="form-label small text-muted">🇺🇿 Uzbek</label>
+              {% if pair.is_button %}
+              <input type="text" name="{{ pair.key }}_uz" class="form-control form-control-sm"
+                     value="{{ pair.value_uz or '' }}">
+              {% else %}
               <textarea name="{{ pair.key }}_uz" class="form-control form-control-sm" rows="2">{{ pair.value_uz or '' }}</textarea>
+              {% endif %}
             </div>
           </div>
         </div>

@@ -71,6 +71,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "Нажимая «Начать», вы подтверждаете своё согласие на обработку персональных данных "
         "или наличие необходимых согласий со стороны уполномоченных лиц."
     ),
+    "btn_disclaimer_link_ru": "📄 Ознакомиться",
+    "btn_disclaimer_start_ru": "Начать",
     "msg_video_ru": "Посмотрите это видео перед тем, как сгенерировать ваше фото! 🎬",
     "msg_subscribe_ru": (
         "Подпишитесь на наш Telegram-канал, чтобы продолжить:\n"
@@ -117,6 +119,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "\"Boshlash\" tugmasini bosish orqali siz shaxsiy ma'lumotlaringizni qayta ishlashga "
         "rozilik bildirasiz yoki buning uchun zarur roziliklar olinganini tasdiqlaysiz."
     ),
+    "btn_disclaimer_link_uz": "📄 Tanishib chiqish",
+    "btn_disclaimer_start_uz": "Boshlash",
     "msg_video_uz": "Rasmingizni yaratishdan oldin ushbu videoni tomosha qiling! 🎬",
     "msg_subscribe_uz": (
         "Davom etish uchun Telegram kanalimizga obuna bo'ling:\n"

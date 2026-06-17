@@ -33,9 +33,17 @@ async def send_disclaimer(
     privacy_url = (await settings_service.get(session, "privacy_policy_url") or "").strip()
     show_link = link_enabled and bool(privacy_url)
 
+    link_label = await settings_service.get_text(session, "btn_disclaimer_link", lang)
+    start_label = await settings_service.get_text(session, "btn_disclaimer_start", lang)
+
     await message.answer(
         disclaimer_text,
-        reply_markup=disclaimer_keyboard(lang, privacy_url if show_link else None),
+        reply_markup=disclaimer_keyboard(
+            lang,
+            privacy_url if show_link else None,
+            link_label=link_label if show_link else None,
+            start_label=start_label or None,
+        ),
         disable_web_page_preview=True,
     )
     await state.set_state(UserFlow.awaiting_privacy)

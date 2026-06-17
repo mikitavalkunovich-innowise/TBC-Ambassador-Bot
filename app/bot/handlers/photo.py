@@ -38,10 +38,7 @@ from app.models.user import FlowStatus, User
 from app.services import settings_service
 from app.services.ai_service import generate_composite_photo
 from app.services.analytics_service import track_event
-from app.services.image_service import (
-    add_logo_watermark_if_available,
-    composite_into_frame_if_available,
-)
+from app.services.image_service import composite_into_frame_if_available
 from app.services.notify_service import notify_budget_exceeded, notify_new_image
 
 router = Router(name="photo")
@@ -126,6 +123,8 @@ async def _run_generation(
     state: FSMContext,
     user_photo_bytes: bytes,
     extra_prompt: str,
+    *,
+    is_regeneration: bool = False,
 ) -> None:
     """AI call → frame/watermark → save → notify admin."""
     lang = user.language.value if user.language else "ru"
@@ -192,9 +191,7 @@ async def _run_generation(
         if frame_path_rel:
             final_image = composite_into_frame_if_available(result.image_bytes, frame_path_rel)
         else:
-            logo_path_rel = await settings_service.get(session, "logo_path")
-            logo_abs = str(get_absolute_path(logo_path_rel)) if logo_path_rel else None
-            final_image = add_logo_watermark_if_available(result.image_bytes, logo_abs)
+            final_image = result.image_bytes
 
         gen_filename = generate_filename("generated.jpg")
         gen_rel_path = await save_upload(final_image, "generated", gen_filename)
@@ -269,10 +266,17 @@ async def _run_generation(
             if lang == "ru"
             else "⚠️ Yaratish muvaffaqiyatsiz tugadi. Qayta urinib ko'ring."
         )
-        await state.set_state(UserFlow.awaiting_photo)
-        await message.answer(
-            await settings_service.get_text(session, "msg_send_photo", lang)
-        )
+        if is_regeneration:
+            user.flow_status = FlowStatus.DONE
+            await session.flush()
+            await state.set_state(UserFlow.awaiting_regeneration_input)
+            await message.answer(error_text, reply_markup=regenerate_keyboard(lang))
+        else:
+            await state.set_state(UserFlow.awaiting_photo)
+            await message.answer(
+                error_text + "\n\n"
+                + await settings_service.get_text(session, "msg_send_photo", lang)
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -565,4 +569,5 @@ async def _run_regen(
         state=state,
         user_photo_bytes=photo_bytes,
         extra_prompt=extra_prompt,
+        is_regeneration=True,
     )

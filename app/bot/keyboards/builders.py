@@ -12,18 +12,23 @@ def language_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def disclaimer_keyboard(lang: str, privacy_url: str | None = None) -> InlineKeyboardMarkup:
+def disclaimer_keyboard(
+    lang: str,
+    privacy_url: str | None = None,
+    link_label: str | None = None,
+    start_label: str | None = None,
+) -> InlineKeyboardMarkup:
     """
     Disclaimer screen buttons:
     - Optional URL button to open the privacy policy (when enabled in admin).
-    - Primary action button to continue (Начать / Boshlash).
+    - Primary action button to continue (Start / Boshlash by default).
     """
     builder = InlineKeyboardBuilder()
     if privacy_url:
-        link_label = "📄 Ознакомиться" if lang == "ru" else "📄 Tanishib chiqish"
-        builder.row(InlineKeyboardButton(text=link_label, url=privacy_url))
-    start_label = "Начать" if lang == "ru" else "Boshlash"
-    builder.row(InlineKeyboardButton(text=start_label, callback_data="privacy:agree"))
+        label = link_label or ("📄 Ознакомиться" if lang == "ru" else "📄 Tanishib chiqish")
+        builder.row(InlineKeyboardButton(text=label, url=privacy_url))
+    start = start_label or ("Начать" if lang == "ru" else "Boshlash")
+    builder.row(InlineKeyboardButton(text=start, callback_data="privacy:agree"))
     return builder.as_markup()
 
 

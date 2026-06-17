@@ -19,15 +19,19 @@ logger = logging.getLogger(__name__)
 
 # Human-readable labels for the Messages tab (optional overrides)
 MESSAGE_LABELS: dict[str, str] = {
-    "msg_privacy": "Legal Disclaimer",
+    "msg_privacy": "Legal Disclaimer (text)",
+    "btn_disclaimer_link": "Disclaimer — Read Policy button label",
+    "btn_disclaimer_start": "Disclaimer — Start button label",
 }
 
 # All message keys managed on the Messages tab
 MESSAGE_KEYS = [
     # --- Ordered by position in user flow ---
     "msg_welcome",
-    "msg_privacy",              # disclaimer screen
-    "msg_subscribe",            # channel subscription gate
+    "msg_privacy",
+    "btn_disclaimer_link",
+    "btn_disclaimer_start",
+    "msg_subscribe",
     "msg_not_subscribed",
     "msg_send_photo",           # first photo request
     "msg_invalid_photo",
@@ -60,6 +64,7 @@ async def settings_page(
             "label": MESSAGE_LABELS.get(k, k.replace("_", " ").replace("msg ", "").title()),
             "value_ru": all_settings.get(f"{k}_ru", ""),
             "value_uz": all_settings.get(f"{k}_uz", ""),
+            "is_button": k.startswith("btn_"),
         }
         for k in MESSAGE_KEYS
     ]
@@ -149,7 +154,6 @@ async def save_media(
     video_url_uz: str = Form(""),
     video_enabled: str = Form("0"),
     ambassador_photo: UploadFile | None = File(None),
-    logo: UploadFile | None = File(None),
     video_file_ru: UploadFile | None = File(None),
     video_file_uz: UploadFile | None = File(None),
     frame_ru: UploadFile | None = File(None),
@@ -172,13 +176,6 @@ async def save_media(
             fn = generate_filename(ambassador_photo.filename)
             rel = await save_upload(data, "ambassador", fn)
             updates["ambassador_photo_path"] = rel
-
-    if logo and logo.filename:
-        data = await logo.read()
-        if data:
-            fn = generate_filename(logo.filename)
-            rel = await save_upload(data, "logo", fn)
-            updates["logo_path"] = rel
 
     if video_file_ru and video_file_ru.filename:
         data = await video_file_ru.read()
