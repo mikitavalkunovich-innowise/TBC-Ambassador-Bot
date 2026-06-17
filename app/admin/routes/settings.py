@@ -17,6 +17,11 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/admin/templates")
 logger = logging.getLogger(__name__)
 
+# Human-readable labels for the Messages tab (optional overrides)
+MESSAGE_LABELS: dict[str, str] = {
+    "msg_privacy": "Legal Disclaimer",
+}
+
 # All message keys managed on the Messages tab
 MESSAGE_KEYS = [
     "msg_welcome",
@@ -48,7 +53,7 @@ async def settings_page(
     message_pairs = [
         {
             "key": k,
-            "label": k.replace("_", " ").replace("msg ", "").title(),
+            "label": MESSAGE_LABELS.get(k, k.replace("_", " ").replace("msg ", "").title()),
             "value_ru": all_settings.get(f"{k}_ru", ""),
             "value_uz": all_settings.get(f"{k}_uz", ""),
         }
@@ -74,6 +79,7 @@ async def save_bot_settings(
     telegram_channel_id: str = Form(""),
     admin_telegram_user_id: str = Form(""),
     privacy_policy_url: str = Form(""),
+    privacy_policy_link_enabled: str = Form("0"),
     channel_check_enabled: str = Form("0"),
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
@@ -83,6 +89,7 @@ async def save_bot_settings(
         "telegram_channel_id": telegram_channel_id.strip(),
         "admin_telegram_user_id": admin_telegram_user_id.strip(),
         "privacy_policy_url": privacy_policy_url.strip(),
+        "privacy_policy_link_enabled": "1" if privacy_policy_link_enabled == "1" else "0",
         "channel_check_enabled": "1" if channel_check_enabled == "1" else "0",
     })
     return RedirectResponse("/admin/settings?tab=bot&saved=1", status_code=303)

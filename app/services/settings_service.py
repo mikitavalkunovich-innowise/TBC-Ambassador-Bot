@@ -23,6 +23,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "privacy_policy_url": "https://example.com/privacy",
     # Feature flags
     "channel_check_enabled": "1",  # "1" = enabled, "0" = disabled
+    "privacy_policy_link_enabled": "0",  # show "Read policy" URL button on disclaimer screen
     # Limits
     "max_regeneration_attempts": "3",
     "budget_limit_usd": "100.00",
@@ -55,9 +56,15 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "msg_welcome_ru": "Добро пожаловать! 👋",
     "msg_select_language_ru": "Выберите язык / Tilni tanlang:",
     "msg_privacy_ru": (
-        "Пожалуйста, ознакомьтесь с нашей политикой конфиденциальности:\n"
-        "{privacy_url}\n\n"
-        "Нажмите «Согласен», чтобы продолжить."
+        "Добро пожаловать!\n\n"
+        "Бот создаёт развлекательное AI-изображение с Эльдором Шомуродовым на основе вашего фото.\n\n"
+        "Загружайте только своё фото — не чужое и не фото несовершеннолетних. Вы несёте "
+        "полную ответственность за загружаемое фото и за дальнейшее использование результата.\n\n"
+        "Изображение создаётся ИИ, носит развлекательный характер и не отражает реального события.\n"
+        "Запрещается использовать сервис для создания оскорбительного, дискредитирующего, "
+        "незаконного или вводящего в заблуждение контента, а также для целей, наносящих ущерб третьим лицам.\n\n"
+        "Нажимая «Начать», вы подтверждаете своё согласие на обработку персональных данных "
+        "или наличие необходимых согласий со стороны уполномоченных лиц."
     ),
     "msg_video_ru": "Посмотрите это видео перед тем, как сгенерировать ваше фото! 🎬",
     "msg_subscribe_ru": (
@@ -84,9 +91,17 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "msg_welcome_uz": "Xush kelibsiz! 👋",
     "msg_select_language_uz": "Выберите язык / Tilni tanlang:",
     "msg_privacy_uz": (
-        "Iltimos, maxfiylik siyosatimizni ko'rib chiqing:\n"
-        "{privacy_url}\n\n"
-        "Davom etish uchun «Roziman» tugmasini bosing."
+        "Xush kelibsiz!\n\n"
+        "Bot suratingiz asosida Eldor Shomurodov ishtirokidagi AI tasvirni yaratadi.\n\n"
+        "Faqat o'zingizning suratingizni yuklang. Boshqa shaxslarning yoki voyaga yetmaganlarning "
+        "suratlarini yuklamang. Yuklanayotgan surat va yaratilgan tasvirdan foydalanish uchun "
+        "to'liq javobgarlikni o'zingizga olasiz.\n\n"
+        "Tasvir sun'iy intellekt (AI) tomonidan yaratiladi, ko'ngilochar xarakterga ega va "
+        "haqiqiy voqeani aks ettirmaydi.\n"
+        "Xizmatdan haqoratli, obro'sizlantiruvchi, noqonuniy yoki chalg'ituvchi kontent yaratish, "
+        "shuningdek, uchinchi shaxslarga zarar yetkazish maqsadida foydalanish taqiqlanadi.\n\n"
+        "\"Boshlash\" tugmasini bosish orqali siz shaxsiy ma'lumotlaringizni qayta ishlashga "
+        "rozilik bildirasiz yoki buning uchun zarur roziliklar olinganini tasdiqlaysiz."
     ),
     "msg_video_uz": "Rasmingizni yaratishdan oldin ushbu videoni tomosha qiling! 🎬",
     "msg_subscribe_uz": (

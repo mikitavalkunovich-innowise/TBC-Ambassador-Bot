@@ -48,6 +48,19 @@
           <label class="form-label fw-semibold">Privacy Policy URL</label>
           <input type="url" name="privacy_policy_url" class="form-control"
                  value="{{ s.get('privacy_policy_url', '') }}" placeholder="https://example.com/privacy">
+          <div class="form-check form-switch mt-2">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="privacyLinkSwitch" name="privacy_policy_link_enabled" value="1"
+                   {% if s.get('privacy_policy_link_enabled', '0') == '1' %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="privacyLinkSwitch">
+              Show «Ознакомиться» button on the disclaimer screen
+            </label>
+          </div>
+          <div class="form-text">
+            When enabled, users see a button that opens this URL.
+            The disclaimer text itself does not include the link — only the optional button.
+            Requires a valid URL above.
+          </div>
         </div>
         <div class="col-12">
           <div class="form-check form-switch">
@@ -202,7 +215,7 @@
       </div>
       <hr>
       <p class="text-muted small mb-3">
-        Message placeholders: <code>{privacy_url}</code>, <code>{channel_link}</code>
+        Message placeholders: <code>{channel_link}</code> (subscription message only)
       </p>
       <div class="row g-3">
         {% for pair in message_pairs %}

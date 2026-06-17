@@ -1,6 +1,6 @@
 """All keyboard builders for the bot."""
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 def language_keyboard() -> InlineKeyboardMarkup:
@@ -12,11 +12,24 @@ def language_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def agree_keyboard(lang: str) -> InlineKeyboardMarkup:
-    label = "✅ Согласен" if lang == "ru" else "✅ Roziman"
+def disclaimer_keyboard(lang: str, privacy_url: str | None = None) -> InlineKeyboardMarkup:
+    """
+    Disclaimer screen buttons:
+    - Optional URL button to open the privacy policy (when enabled in admin).
+    - Primary action button to continue (Начать / Boshlash).
+    """
     builder = InlineKeyboardBuilder()
-    builder.button(text=label, callback_data="privacy:agree")
+    if privacy_url:
+        link_label = "📄 Ознакомиться" if lang == "ru" else "📄 Tanishib chiqish"
+        builder.row(InlineKeyboardButton(text=link_label, url=privacy_url))
+    start_label = "Начать" if lang == "ru" else "Boshlash"
+    builder.row(InlineKeyboardButton(text=start_label, callback_data="privacy:agree"))
     return builder.as_markup()
+
+
+def agree_keyboard(lang: str) -> InlineKeyboardMarkup:
+    """Deprecated alias — use disclaimer_keyboard instead."""
+    return disclaimer_keyboard(lang)
 
 
 def generate_keyboard(lang: str) -> InlineKeyboardMarkup:

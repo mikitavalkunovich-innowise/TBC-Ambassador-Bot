@@ -13,9 +13,10 @@ from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.handlers.privacy import send_disclaimer
 from app.bot.keyboards.builders import language_keyboard
 from app.bot.states import UserFlow
-from app.models.user import FlowStatus, Language, User
+from app.models.user import FlowStatus, User
 from app.services import settings_service
 from app.services.analytics_service import track_event
 from app.models.event import EventType
@@ -29,11 +30,13 @@ async def _resume_user(message: Message, user: User, state: FSMContext, session:
     lang = user.language.value if user.language else "ru"
 
     match user.flow_status:
-        case FlowStatus.STARTED | FlowStatus.LANGUAGE_SET:
-            # Restart language selection
+        case FlowStatus.STARTED:
             text = await settings_service.get(session, "msg_select_language_ru") or "Select language:"
             await message.answer(text, reply_markup=language_keyboard())
             await state.set_state(UserFlow.selecting_language)
+
+        case FlowStatus.LANGUAGE_SET:
+            await send_disclaimer(message, user, session, state)
 
         case FlowStatus.PRIVACY_ACCEPTED:
             # Re-send video step
