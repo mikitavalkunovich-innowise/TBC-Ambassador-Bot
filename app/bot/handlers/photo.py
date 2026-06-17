@@ -44,12 +44,7 @@ from app.services.image_service import (
     compress_user_photo,
 )
 from app.services.notify_service import notify_budget_exceeded, notify_new_image
-from app.services.telegram_file_service import (
-    download_telegram_file_bytes,
-    purge_local_image_files,
-    purge_user_photo_only,
-    verify_telegram_file,
-)
+from app.services.telegram_file_service import download_telegram_file_bytes
 
 router = Router(name="photo")
 logger = logging.getLogger(__name__)
@@ -192,13 +187,6 @@ async def _run_generation(
     session.add(image_record)
     await session.flush()
 
-    # The AI generation uses user_photo_bytes from memory, not from disk.
-    # If we already have a Telegram backup of the selfie (file_id from the upload),
-    # the on-disk copy is redundant — remove it now to free space immediately.
-    if image_record.telegram_user_photo_file_id:
-        await purge_user_photo_only(image_record)
-        await session.flush()
-
     try:
         prompt_template = await settings_service.get(session, "generation_prompt") or ""
 
@@ -266,13 +254,6 @@ async def _run_generation(
                 image_record.admin_tg_chat_id = chat_id
                 if gen_file_id:
                     image_record.telegram_image_file_id = gen_file_id
-                    # Verify the file is accessible then purge local copy immediately
-                    if await verify_telegram_file(bot, gen_file_id):
-                        await purge_local_image_files(image_record)
-                        logger.info(
-                            "Local files purged immediately after confirmed TG upload (image_id=%s)",
-                            image_record.id,
-                        )
                 await session.flush()
             except Exception:
                 logger.exception("Failed to send admin notification")
@@ -642,10 +623,10 @@ async def _run_regen(
                 if not resolved_file_id:
                     resolved_file_id = last_image.telegram_user_photo_file_id
 
-        # 2b. Try downloading from Telegram
+        # 2b. Local file missing (purged or never saved) — download from Telegram
         if photo_bytes is None and last_image and last_image.telegram_user_photo_file_id:
             logger.info(
-                "Local selfie purged; downloading from Telegram for regen (image_id=%s)",
+                "Local selfie not on disk; downloading from Telegram for regen (image_id=%s)",
                 last_image.id,
             )
             photo_bytes = await download_telegram_file_bytes(

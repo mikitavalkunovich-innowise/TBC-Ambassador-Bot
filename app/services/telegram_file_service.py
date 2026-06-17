@@ -87,21 +87,6 @@ async def _unlink_if_exists(relative_path: str | None) -> int:
     return await asyncio.to_thread(_stat_and_unlink, path)
 
 
-async def purge_user_photo_only(record: "GeneratedImage") -> int:
-    """
-    Delete only the local user selfie for a record, leaving image_path untouched.
-
-    Called right after the GeneratedImage row is created: the AI uses the
-    original bytes from memory, so the on-disk copy is redundant as soon as
-    telegram_user_photo_file_id is confirmed.  Returns bytes freed.
-    """
-    if not record.user_photo_path:
-        return 0
-    freed = await _unlink_if_exists(record.user_photo_path)
-    record.user_photo_path = None
-    return freed
-
-
 async def purge_local_image_files(record: "GeneratedImage") -> int:
     """
     Delete local disk copies of the generated image and user photo.

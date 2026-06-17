@@ -114,7 +114,16 @@ async def telegram_webhook(request: Request) -> JSONResponse:
 
     data = await request.json()
     update = Update.model_validate(data)
-    await app.state.dp.feed_update(bot=app.state.bot, update=update)
+    try:
+        await app.state.dp.feed_update(bot=app.state.bot, update=update)
+    except Exception:
+        # Never let handler exceptions propagate to the ASGI layer.
+        # An unhandled exception here causes Railway to restart the container,
+        # wiping MemoryStorage and all FSM state.
+        logger.exception(
+            "Unhandled exception processing update id=%s",
+            getattr(update, "update_id", "?"),
+        )
     return JSONResponse({"ok": True})
 
 
