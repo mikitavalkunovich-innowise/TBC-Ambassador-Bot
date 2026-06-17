@@ -151,7 +151,7 @@ def composite_into_frame(image_bytes: bytes, frame_bytes: bytes) -> bytes:
         result = Image.alpha_composite(canvas, frame)
 
     buf = io.BytesIO()
-    result.convert("RGB").save(buf, format="WEBP", quality=WEBP_QUALITY, method=WEBP_METHOD)
+    result.convert("RGB").save(buf, format="WEBP", quality=WEBP_QUALITY_GENERATED, method=WEBP_METHOD)
     return buf.getvalue()
 
 
