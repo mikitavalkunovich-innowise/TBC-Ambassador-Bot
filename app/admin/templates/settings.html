@@ -131,6 +131,22 @@
           <input type="file" name="logo" class="form-control" accept="image/*">
           <div class="form-text">Placed in the top-right corner of every generated image.</div>
         </div>
+        <!-- Video toggle -->
+        <div class="col-12">
+          <hr class="my-1">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="videoEnabledSwitch" name="video_enabled" value="1"
+                   {% if s.get('video_enabled', '0') == '1' %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="videoEnabledSwitch">
+              Send bonus video after approved result
+            </label>
+          </div>
+          <div class="form-text">
+            When enabled, the Eldor video is sent to the user immediately after their approved photo.
+            Requires a video URL or file to be configured below.
+          </div>
+        </div>
         <!-- Video RU -->
         <div class="col-md-6">
           <label class="form-label fw-semibold">Video (Russian) — URL</label>

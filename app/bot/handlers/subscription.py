@@ -106,13 +106,13 @@ async def handle_subscription_check(
     # User is subscribed — record and proceed to photo
     from datetime import datetime, timezone
     user.channel_subscribed_at = datetime.now(timezone.utc)
+    user.flow_status = FlowStatus.VIDEO_SEEN  # all gates passed, ready for photo upload
     await session.flush()
 
     await track_event(session, user.id, EventType.CHANNEL_SUBSCRIBED)
 
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    # Proceed to photo request
     from app.bot.handlers.photo import send_photo_request
     await send_photo_request(callback.message, user, session, state)
     await callback.answer()

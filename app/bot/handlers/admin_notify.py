@@ -106,6 +106,15 @@ async def handle_approve(
 
     lang = user.language.value if user.language else "ru"
 
+    # Optionally send the bonus Eldor video after the approved image
+    video_enabled = await settings_service.get(session, "video_enabled") == "1"
+    if video_enabled:
+        try:
+            from app.bot.handlers.media import send_video_after_result
+            await send_video_after_result(bot, user.telegram_id, user, session)
+        except Exception:
+            logger.exception("Failed to send bonus video to user %d", user.telegram_id)
+
     # Offer regeneration if attempts remain
     if attempts_remaining > 0:
         from app.bot.keyboards.builders import regenerate_keyboard

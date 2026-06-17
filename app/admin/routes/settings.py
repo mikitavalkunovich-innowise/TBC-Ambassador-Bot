@@ -24,17 +24,21 @@ MESSAGE_LABELS: dict[str, str] = {
 
 # All message keys managed on the Messages tab
 MESSAGE_KEYS = [
+    # --- Ordered by position in user flow ---
     "msg_welcome",
-    "msg_privacy",
-    "msg_video",
-    "msg_subscribe",
+    "msg_privacy",              # disclaimer screen
+    "msg_subscribe",            # channel subscription gate
     "msg_not_subscribed",
-    "msg_send_photo",
+    "msg_send_photo",           # first photo request
     "msg_invalid_photo",
     "msg_generating",
     "msg_pending_review",
     "msg_approved",
-    "msg_regenerate_prompt",
+    "msg_video",                # bonus video after approval
+    "msg_regenerate_prompt",    # «Generate new» offer
+    "msg_regen_ask_photo",      # regen step 1: new selfie or skip
+    "msg_regen_ask_text",       # regen step 2: text or skip
+    "msg_regen_nothing_changed",
     "msg_already_participated",
     "msg_no_attempts_left",
     "rejection_message",
@@ -143,6 +147,7 @@ async def save_media(
     request: Request,
     video_url_ru: str = Form(""),
     video_url_uz: str = Form(""),
+    video_enabled: str = Form("0"),
     ambassador_photo: UploadFile | None = File(None),
     logo: UploadFile | None = File(None),
     video_file_ru: UploadFile | None = File(None),
@@ -152,7 +157,9 @@ async def save_media(
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
-    updates: dict[str, str] = {}
+    updates: dict[str, str] = {
+        "video_enabled": "1" if video_enabled == "1" else "0",
+    }
 
     if video_url_ru.strip():
         updates["video_url_ru"] = video_url_ru.strip()

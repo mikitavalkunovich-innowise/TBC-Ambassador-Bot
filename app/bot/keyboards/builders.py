@@ -55,3 +55,10 @@ def regenerate_keyboard(lang: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=label, callback_data="action:regenerate")
     return builder.as_markup()
+
+
+def skip_keyboard(lang: str) -> InlineKeyboardMarkup:
+    label = "⏭ Пропустить" if lang == "ru" else "⏭ O'tkazib yuborish"
+    builder = InlineKeyboardBuilder()
+    builder.button(text=label, callback_data="regen:skip")
+    return builder.as_markup()

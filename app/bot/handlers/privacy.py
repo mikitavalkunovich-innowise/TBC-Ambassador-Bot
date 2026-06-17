@@ -60,11 +60,17 @@ async def handle_privacy_agreed(
     await session.flush()
 
     await track_event(session, user.id, EventType.PRIVACY_ACCEPTED)
-
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    # Proceed to video step
-    from app.bot.handlers.media import send_video_message
-    await send_video_message(callback.message, user, session)
-    await state.set_state(UserFlow.awaiting_video_action)
+    # Next step: subscription check (if enabled) or go directly to photo request
+    channel_check_enabled = await settings_service.get(session, "channel_check_enabled", "1")
+    if channel_check_enabled == "1":
+        from app.bot.handlers.subscription import send_subscription_prompt
+        await send_subscription_prompt(callback.message, user, session, state)
+    else:
+        user.flow_status = FlowStatus.VIDEO_SEEN
+        await session.flush()
+        from app.bot.handlers.photo import send_photo_request
+        await send_photo_request(callback.message, user, session, state)
+
     await callback.answer()

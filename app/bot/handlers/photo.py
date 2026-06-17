@@ -1,6 +1,19 @@
 """
 Photo upload and image generation handler.
-Handles both first-time photo submission and regeneration requests.
+
+First generation:
+  awaiting_photo  →  user sends selfie  →  _run_generation()
+
+Regeneration (sequential, both steps optional):
+  awaiting_regeneration_input
+    → user presses «Generate new»
+  awaiting_regen_photo  (step 1: new selfie or Skip)
+    → photo received  →  store file_id in FSM  →  awaiting_regen_text
+    → Skip            →  awaiting_regen_text (no_photo flag)
+  awaiting_regen_text   (step 2: text description or Skip)
+    → text received   →  store text  →  _run_generation()
+    → Skip + had photo →  _run_generation() with stored photo, no text
+    → Skip + no photo  →  «nothing changed» message, back to awaiting_regeneration_input
 """
 import logging
 import uuid
@@ -12,7 +25,7 @@ from aiogram.types import CallbackQuery, Message, PhotoSize
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards.builders import generate_keyboard, regenerate_keyboard
+from app.bot.keyboards.builders import generate_keyboard, regenerate_keyboard, skip_keyboard
 from app.bot.states import UserFlow
 from app.core.storage import (
     generate_filename,
@@ -35,13 +48,17 @@ router = Router(name="photo")
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
 async def send_photo_request(
     message: Message,
     user: User,
     session: AsyncSession,
     state: FSMContext,
 ) -> None:
-    """Ask the user to send a selfie."""
+    """Ask the user to send a selfie (first generation)."""
     lang = user.language.value if user.language else "ru"
     text = await settings_service.get_text(session, "msg_send_photo", lang)
     await message.answer(text)
@@ -61,15 +78,18 @@ async def send_regenerate_prompt(
     await state.set_state(UserFlow.awaiting_regeneration_input)
 
 
+# ---------------------------------------------------------------------------
+# Budget check
+# ---------------------------------------------------------------------------
+
 async def _check_and_enforce_budget(
     session: AsyncSession,
     bot: Bot,
     user: User,
 ) -> bool:
     """
-    Check if budget limit is exceeded.
-    Returns True if generation is allowed, False if blocked.
-    Sends user notification and admin alert if blocked.
+    Return True if generation is allowed, False if the budget cap is exceeded.
+    Notifies the user and the admin when blocked.
     """
     limit_str = await settings_service.get(session, "budget_limit_usd") or "0"
     spent_str = await settings_service.get(session, "budget_spent_usd") or "0"
@@ -79,16 +99,11 @@ async def _check_and_enforce_budget(
     if limit > 0 and spent >= limit:
         lang = user.language.value if user.language else "ru"
         exceeded_msg = await settings_service.get_text(session, "budget_exceeded_message", lang)
-
-        # Notify user
         await bot.send_message(chat_id=user.telegram_id, text=exceeded_msg)
 
-        # Notify admin
         admin_id_str = await settings_service.get(session, "admin_telegram_user_id")
         if admin_id_str:
             try:
-                from app.core.config import get_settings
-                config = get_settings()
                 await notify_budget_exceeded(bot, int(admin_id_str), float(limit), float(spent))
             except Exception:
                 logger.exception("Failed to notify admin about budget exceeded")
@@ -99,6 +114,10 @@ async def _check_and_enforce_budget(
     return True
 
 
+# ---------------------------------------------------------------------------
+# Core generation pipeline
+# ---------------------------------------------------------------------------
+
 async def _run_generation(
     message: Message,
     bot: Bot,
@@ -108,19 +127,18 @@ async def _run_generation(
     user_photo_bytes: bytes,
     extra_prompt: str,
 ) -> None:
-    """Core generation pipeline: AI call → watermark → save → notify admin."""
+    """AI call → frame/watermark → save → notify admin."""
     lang = user.language.value if user.language else "ru"
 
-    # Check budget
     if not await _check_and_enforce_budget(session, bot, user):
         return
 
-    # Get ambassador photo
     ambassador_path_rel = await settings_service.get(session, "ambassador_photo_path")
     if not ambassador_path_rel:
         logger.error("Ambassador photo not configured")
         await message.answer(
-            "Generation is temporarily unavailable. Please try again later." if lang == "ru"
+            "Generation is temporarily unavailable. Please try again later."
+            if lang == "ru"
             else "Yaratish vaqtincha mavjud emas."
         )
         return
@@ -128,27 +146,27 @@ async def _run_generation(
     ambassador_path = get_absolute_path(ambassador_path_rel)
     if not ambassador_path.exists():
         logger.error("Ambassador photo file not found: %s", ambassador_path)
-        await message.answer("Generation is temporarily unavailable." if lang == "ru" else "Vaqtincha mavjud emas.")
+        await message.answer(
+            "Generation is temporarily unavailable."
+            if lang == "ru"
+            else "Vaqtincha mavjud emas."
+        )
         return
 
     ambassador_bytes = ambassador_path.read_bytes()
 
-    # Send "generating" message
     generating_text = await settings_service.get_text(session, "msg_generating", lang)
     generating_msg = await message.answer(generating_text)
 
-    # Update user status
     user.flow_status = FlowStatus.GENERATING
     attempt_number = user.regenerations_used + 1
     await session.flush()
 
     await track_event(session, user.id, EventType.GENERATION_REQUESTED)
 
-    # Save user photo
     user_photo_filename = generate_filename("user_photo.jpg")
     user_photo_rel = await save_upload(user_photo_bytes, "user_photos", user_photo_filename)
 
-    # Create DB record for the generation
     image_record = GeneratedImage(
         id=str(uuid.uuid4()),
         user_id=user.id,
@@ -161,10 +179,8 @@ async def _run_generation(
     await session.flush()
 
     try:
-        # Get generation prompt
         prompt_template = await settings_service.get(session, "generation_prompt") or ""
 
-        # Run AI generation
         result = await generate_composite_photo(
             user_photo_bytes=user_photo_bytes,
             ambassador_photo_bytes=ambassador_bytes,
@@ -172,7 +188,6 @@ async def _run_generation(
             extra_prompt=extra_prompt,
         )
 
-        # Apply Instagram frame if configured, otherwise fall back to logo watermark
         frame_path_rel = await settings_service.get(session, f"frame_path_{lang}")
         if frame_path_rel:
             final_image = composite_into_frame_if_available(result.image_bytes, frame_path_rel)
@@ -181,21 +196,18 @@ async def _run_generation(
             logo_abs = str(get_absolute_path(logo_path_rel)) if logo_path_rel else None
             final_image = add_logo_watermark_if_available(result.image_bytes, logo_abs)
 
-        # Save generated image
         gen_filename = generate_filename("generated.jpg")
         gen_rel_path = await save_upload(final_image, "generated", gen_filename)
 
-        # Update record with results
         image_record.image_path = gen_rel_path
         image_record.input_tokens = result.input_tokens
         image_record.output_tokens = result.output_tokens
         image_record.cost_usd = float(result.cost_usd)
         await session.flush()
 
-        # Add cost to budget tracking
         await settings_service.add_budget_spent(session, result.cost_usd)
 
-        # Re-check budget after spending (for alert only)
+        # Check budget cap after spending (admin alert only)
         limit_str = await settings_service.get(session, "budget_limit_usd") or "0"
         spent_str = await settings_service.get(session, "budget_spent_usd") or "0"
         limit = Decimal(limit_str)
@@ -207,12 +219,10 @@ async def _run_generation(
 
         await track_event(session, user.id, EventType.IMAGE_GENERATED)
 
-        # Update user status
         user.flow_status = FlowStatus.AWAITING_APPROVAL
         user.regenerations_used = attempt_number
         await session.flush()
 
-        # Notify admin for approval
         admin_id_str = await settings_service.get(session, "admin_telegram_user_id")
         from app.core.config import get_settings
         config = get_settings()
@@ -238,18 +248,14 @@ async def _run_generation(
             except Exception:
                 logger.exception("Failed to send admin notification")
 
-        # Inform user
         await generating_msg.delete()
         pending_text = await settings_service.get_text(session, "msg_pending_review", lang)
         await message.answer(pending_text)
 
     except Exception:
         logger.exception("Image generation failed for user %d", user.telegram_id)
-        # Mark generation record as technical failure (not moderation rejection)
         image_record.status = ImageStatus.REJECTED
-        # Decrement attempt counter so the user keeps their slot
         user.regenerations_used = max(0, attempt_number - 1)
-        # Reset DB flow status so /start resume works correctly
         user.flow_status = FlowStatus.VIDEO_SEEN
         await session.flush()
 
@@ -263,10 +269,15 @@ async def _run_generation(
             if lang == "ru"
             else "⚠️ Yaratish muvaffaqiyatsiz tugadi. Qayta urinib ko'ring."
         )
-        # Reset FSM state so the generate button works again
-        await state.set_state(UserFlow.awaiting_video_action)
-        await message.answer(error_text, reply_markup=generate_keyboard(lang))
+        await state.set_state(UserFlow.awaiting_photo)
+        await message.answer(
+            await settings_service.get_text(session, "msg_send_photo", lang)
+        )
 
+
+# ---------------------------------------------------------------------------
+# First-generation handlers
+# ---------------------------------------------------------------------------
 
 @router.message(UserFlow.awaiting_photo, F.photo)
 async def handle_photo_upload(
@@ -275,21 +286,13 @@ async def handle_photo_upload(
     session: AsyncSession,
     bot: Bot,
 ) -> None:
-    """Handle selfie photo from user (first attempt or regeneration with optional extra prompt)."""
+    """Handle selfie photo from user (first attempt)."""
     tg_id = message.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
-
     if user is None:
         return
 
-    # Retrieve any extra prompt stored from a previous text message
-    data = await state.get_data()
-    extra_prompt = data.get("extra_prompt", "")
-    if extra_prompt:
-        await state.update_data(extra_prompt="")
-
-    # Get highest resolution photo
     photo: PhotoSize = message.photo[-1]
     file = await bot.get_file(photo.file_id)
     photo_bytes = await bot.download_file(file.file_path)
@@ -302,7 +305,7 @@ async def handle_photo_upload(
         session=session,
         state=state,
         user_photo_bytes=photo_data,
-        extra_prompt=extra_prompt,
+        extra_prompt="",
     )
 
 
@@ -316,10 +319,13 @@ async def handle_invalid_photo(
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
     lang = user.language.value if user and user.language else "ru"
-
     text = await settings_service.get_text(session, "msg_invalid_photo", lang)
     await message.answer(text)
 
+
+# ---------------------------------------------------------------------------
+# Regeneration entry point
+# ---------------------------------------------------------------------------
 
 @router.callback_query(UserFlow.awaiting_regeneration_input, F.data == "action:regenerate")
 async def handle_regenerate_button(
@@ -327,44 +333,236 @@ async def handle_regenerate_button(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """User pressed 'Generate new' button — ask for new input."""
+    """User pressed «Generate new» — begin sequential regen flow (step 1: photo)."""
     tg_id = callback.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
-
     if user is None:
         await callback.answer()
         return
 
-    await state.set_state(UserFlow.awaiting_photo)
+    lang = user.language.value if user.language else "ru"
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    lang = user.language.value if user.language else "ru"
-    text = await settings_service.get_text(session, "msg_send_photo", lang)
-    await callback.message.answer(text)
+    # Clear any stale regen data
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+
+    text = await settings_service.get_text(session, "msg_regen_ask_photo", lang)
+    await callback.message.answer(text, reply_markup=skip_keyboard(lang))
+    await state.set_state(UserFlow.awaiting_regen_photo)
     await callback.answer()
 
 
-@router.message(UserFlow.awaiting_regeneration_input, F.text)
-async def handle_regeneration_text(
+# ---------------------------------------------------------------------------
+# Regeneration step 1: new photo (or Skip)
+# ---------------------------------------------------------------------------
+
+@router.message(UserFlow.awaiting_regen_photo, F.photo)
+async def handle_regen_photo(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
     bot: Bot,
 ) -> None:
-    """User sent a text prompt for regeneration — ask for new photo."""
+    """User sent a new selfie — store it, proceed to step 2 (text)."""
     tg_id = message.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
-
     if user is None:
         return
 
-    lang = user.language.value if user.language else "ru"
-    # Store extra prompt in FSM data
-    await state.update_data(extra_prompt=message.text)
-    await state.set_state(UserFlow.awaiting_photo)
+    photo: PhotoSize = message.photo[-1]
+    file = await bot.get_file(photo.file_id)
+    photo_bytes = await bot.download_file(file.file_path)
+    photo_data = photo_bytes.read() if hasattr(photo_bytes, "read") else bytes(photo_bytes)
 
-    text = await settings_service.get_text(session, "msg_send_photo", lang)
+    await state.update_data(regen_photo_bytes=list(photo_data), regen_extra_prompt=None)
+
+    lang = user.language.value if user.language else "ru"
+    text = await settings_service.get_text(session, "msg_regen_ask_text", lang)
+    await message.answer(text, reply_markup=skip_keyboard(lang))
+    await state.set_state(UserFlow.awaiting_regen_text)
+
+
+@router.callback_query(UserFlow.awaiting_regen_photo, F.data == "regen:skip")
+async def handle_regen_photo_skip(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """User skipped the new photo step — proceed to step 2 (text)."""
+    tg_id = callback.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        await callback.answer()
+        return
+
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    lang = user.language.value if user.language else "ru"
+    text = await settings_service.get_text(session, "msg_regen_ask_text", lang)
+    await callback.message.answer(text, reply_markup=skip_keyboard(lang))
+    await state.set_state(UserFlow.awaiting_regen_text)
+    await callback.answer()
+
+
+@router.message(UserFlow.awaiting_regen_photo, ~F.photo)
+async def handle_regen_photo_invalid(
+    message: Message,
+    session: AsyncSession,
+) -> None:
+    """User sent a non-photo message during the photo step — remind them."""
+    tg_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    lang = user.language.value if user and user.language else "ru"
+    text = await settings_service.get_text(session, "msg_invalid_photo", lang)
     await message.answer(text)
 
+
+# ---------------------------------------------------------------------------
+# Regeneration step 2: text description (or Skip)
+# ---------------------------------------------------------------------------
+
+@router.message(UserFlow.awaiting_regen_text, F.text)
+async def handle_regen_text(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """User provided a text description — trigger generation."""
+    tg_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return
+
+    data = await state.get_data()
+    raw_photo = data.get("regen_photo_bytes")
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+
+    await _run_regen(
+        message=message,
+        bot=bot,
+        user=user,
+        session=session,
+        state=state,
+        raw_photo=raw_photo,
+        extra_prompt=message.text or "",
+    )
+
+
+@router.callback_query(UserFlow.awaiting_regen_text, F.data == "regen:skip")
+async def handle_regen_text_skip(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """User skipped text step.
+
+    - If they provided a photo in step 1 → run generation with no extra prompt.
+    - If both steps were skipped → show «nothing changed» message.
+    """
+    tg_id = callback.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    raw_photo = data.get("regen_photo_bytes")
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    lang = user.language.value if user.language else "ru"
+
+    if raw_photo is None:
+        # Both steps skipped — nothing to regenerate
+        nothing_text = await settings_service.get_text(
+            session, "msg_regen_nothing_changed", lang
+        )
+        await callback.message.answer(
+            nothing_text,
+            reply_markup=regenerate_keyboard(lang),
+        )
+        await state.set_state(UserFlow.awaiting_regeneration_input)
+        await callback.answer()
+        return
+
+    await callback.answer()
+    await _run_regen(
+        message=callback.message,
+        bot=bot,
+        user=user,
+        session=session,
+        state=state,
+        raw_photo=raw_photo,
+        extra_prompt="",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Internal: dispatch regen to core pipeline
+# ---------------------------------------------------------------------------
+
+async def _run_regen(
+    message: Message,
+    bot: Bot,
+    user: User,
+    session: AsyncSession,
+    state: FSMContext,
+    raw_photo: list[int] | None,
+    extra_prompt: str,
+) -> None:
+    """
+    Resolve the stored photo (or fall back to the ambassador photo alone)
+    then call _run_generation.
+
+    raw_photo is stored as list[int] in FSM memory (JSON-serialisable).
+    """
+    if raw_photo is not None:
+        photo_bytes = bytes(raw_photo)
+    else:
+        # No new photo provided — reuse the user's last submitted photo from DB
+        from sqlalchemy import desc
+        from app.models.generation import GeneratedImage as GI
+        latest = await session.execute(
+            select(GI)
+            .where(GI.user_id == user.id)
+            .order_by(desc(GI.created_at))
+            .limit(1)
+        )
+        last_image = latest.scalar_one_or_none()
+        if last_image and last_image.user_photo_path:
+            photo_path = get_absolute_path(last_image.user_photo_path)
+            if photo_path.exists():
+                photo_bytes = photo_path.read_bytes()
+            else:
+                lang = user.language.value if user.language else "ru"
+                await message.answer(
+                    await settings_service.get_text(session, "msg_send_photo", lang)
+                )
+                await state.set_state(UserFlow.awaiting_photo)
+                return
+        else:
+            lang = user.language.value if user.language else "ru"
+            await message.answer(
+                await settings_service.get_text(session, "msg_send_photo", lang)
+            )
+            await state.set_state(UserFlow.awaiting_photo)
+            return
+
+    await _run_generation(
+        message=message,
+        bot=bot,
+        user=user,
+        session=session,
+        state=state,
+        user_photo_bytes=photo_bytes,
+        extra_prompt=extra_prompt,
+    )

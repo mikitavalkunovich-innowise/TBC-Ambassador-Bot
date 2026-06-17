@@ -39,27 +39,30 @@ async def _resume_user(message: Message, user: User, state: FSMContext, session:
             await send_disclaimer(message, user, session, state)
 
         case FlowStatus.PRIVACY_ACCEPTED:
-            # Re-send video step
-            from app.bot.handlers.media import send_video_message
-            await send_video_message(message, user, session)
+            # Disclaimer accepted but subscription not yet done (or was disabled)
+            channel_check_enabled = await settings_service.get(session, "channel_check_enabled", "1")
+            if channel_check_enabled == "1":
+                from app.bot.handlers.subscription import send_subscription_prompt
+                await send_subscription_prompt(message, user, session, state)
+            else:
+                user.flow_status = FlowStatus.VIDEO_SEEN
+                await session.flush()
+                from app.bot.handlers.photo import send_photo_request
+                await send_photo_request(message, user, session, state)
 
         case FlowStatus.VIDEO_SEEN:
-            # Re-show generate button
-            from app.bot.handlers.media import send_generate_prompt
-            await send_generate_prompt(message, lang, session)
-            await state.set_state(UserFlow.awaiting_video_action)
+            # All gates passed — resume at photo upload
+            from app.bot.handlers.photo import send_photo_request
+            await send_photo_request(message, user, session, state)
 
         case FlowStatus.GENERATING | FlowStatus.AWAITING_APPROVAL:
-            # Image is being processed / awaiting moderation
             pending_msg = await settings_service.get_text(session, "msg_pending_review", lang)
             await message.answer(pending_msg)
 
         case FlowStatus.DONE:
-            # Check if regenerations are still available
             max_attempts_str = await settings_service.get(session, "max_regeneration_attempts") or "3"
             max_attempts = int(max_attempts_str)
             if user.regenerations_used < max_attempts:
-                # Offer to regenerate
                 from app.bot.handlers.photo import send_regenerate_prompt
                 await send_regenerate_prompt(message, user, session, state)
             else:

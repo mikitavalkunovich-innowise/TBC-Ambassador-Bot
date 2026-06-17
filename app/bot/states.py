@@ -6,7 +6,8 @@ class UserFlow(StatesGroup):
 
     selecting_language = State()
     awaiting_privacy = State()
-    awaiting_video_action = State()     # after video is sent, waiting for "Generate" button
-    checking_subscription = State()     # waiting for "I subscribed" confirmation
-    awaiting_photo = State()            # waiting for selfie
-    awaiting_regeneration_input = State()  # waiting for new photo or text after a result
+    checking_subscription = State()       # waiting for "I subscribed" confirmation
+    awaiting_photo = State()              # waiting for selfie (first generation)
+    awaiting_regen_photo = State()        # regen step 1: new selfie or skip
+    awaiting_regen_text = State()         # regen step 2: text description or skip
+    awaiting_regeneration_input = State() # holding state between result and regen start

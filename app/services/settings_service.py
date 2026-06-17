@@ -22,8 +22,9 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "admin_telegram_user_id": "",
     "privacy_policy_url": "https://example.com/privacy",
     # Feature flags
-    "channel_check_enabled": "1",  # "1" = enabled, "0" = disabled
+    "channel_check_enabled": "1",        # "1" = enabled, "0" = disabled
     "privacy_policy_link_enabled": "0",  # show "Read policy" URL button on disclaimer screen
+    "video_enabled": "0",                # show bonus Eldor video after approved result
     # Limits
     "max_regeneration_attempts": "3",
     "budget_limit_usd": "100.00",
@@ -81,9 +82,18 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "msg_generating_ru": "⏳ Генерируем ваше фото… Пожалуйста, подождите.",
     "msg_pending_review_ru": "✅ Ваше фото отправлено на проверку. Мы уведомим вас о результате.",
     "msg_approved_ru": "🎉 Ваше фото одобрено! Вот ваш результат:",
-    "msg_regenerate_prompt_ru": (
-        "Хотите сгенерировать новое фото? Опишите, что хотите изменить, "
-        "или отправьте новое селфи."
+    "msg_regenerate_prompt_ru": "Хотите сгенерировать новое фото? Нажмите кнопку ниже.",
+    "msg_regen_ask_photo_ru": (
+        "📸 Хотите загрузить новое селфи?\n"
+        "Отправьте фото или нажмите «Пропустить»."
+    ),
+    "msg_regen_ask_text_ru": (
+        "✏️ Хотите добавить пожелания к генерации?\n"
+        "Напишите, что хотите изменить, или нажмите «Пропустить»."
+    ),
+    "msg_regen_nothing_changed_ru": (
+        "Вы ничего не изменили.\n"
+        "Загрузите новое фото или добавьте описание, чтобы сгенерировать новый результат."
     ),
     "msg_already_participated_ru": "Вы уже приняли участие. Спасибо! 🙌",
     "msg_no_attempts_left_ru": "Вы использовали все попытки генерации. Спасибо за участие!",
@@ -118,9 +128,18 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "msg_generating_uz": "⏳ Rasmingiz yaratilmoqda… Iltimos, kuting.",
     "msg_pending_review_uz": "✅ Rasmingiz tekshirish uchun yuborildi. Natija haqida xabardor qilamiz.",
     "msg_approved_uz": "🎉 Rasmingiz tasdiqlandi! Mana natija:",
-    "msg_regenerate_prompt_uz": (
-        "Yangi rasm yaratishni xohlaysizmi? "
-        "Nima o'zgartirishni xohlayotganingizni yozing yoki yangi selfi yuboring."
+    "msg_regenerate_prompt_uz": "Yangi rasm yaratishni xohlaysizmi? Quyidagi tugmani bosing.",
+    "msg_regen_ask_photo_uz": (
+        "📸 Yangi selfi yuklashni xohlaysizmi?\n"
+        "Rasm yuboring yoki «O'tkazib yuborish» tugmasini bosing."
+    ),
+    "msg_regen_ask_text_uz": (
+        "✏️ Generatsiyaga izoh qo'shishni xohlaysizmi?\n"
+        "Nima o'zgartirishni xohlayotganingizni yozing yoki «O'tkazib yuborish» tugmasini bosing."
+    ),
+    "msg_regen_nothing_changed_uz": (
+        "Siz hech narsa o'zgartirmadingiz.\n"
+        "Yangi natija olish uchun rasm yuboring yoki izoh qo'shing."
     ),
     "msg_already_participated_uz": "Siz allaqachon ishtirok etgansiz. Rahmat! 🙌",
     "msg_no_attempts_left_uz": "Barcha urinishlar ishlatildi. Ishtirok etganingiz uchun rahmat!",
