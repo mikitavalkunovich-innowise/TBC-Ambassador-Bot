@@ -92,6 +92,10 @@ async def handle_approve(
         await callback.answer("Already reviewed.", show_alert=True)
         return
 
+    # Acknowledge the callback immediately — Telegram requires this within 30 seconds.
+    # All subsequent work (send photo, video, regen prompt, edit message) can take longer.
+    await callback.answer("Approved ✅")
+
     # Update image status
     image.status = ImageStatus.APPROVED
     image.reviewed_at = datetime.now(timezone.utc)
@@ -157,9 +161,6 @@ async def handle_approve(
             admin_base_url=config.webhook_base_url,
         )
 
-    await callback.answer("Approved ✅")
-
-
 @router.callback_query(F.data.startswith(f"{REJECT_CB}:"))
 async def handle_reject(
     callback: CallbackQuery,
@@ -181,6 +182,9 @@ async def handle_reject(
     if image.status != ImageStatus.PENDING:
         await callback.answer("Already reviewed.", show_alert=True)
         return
+
+    # Acknowledge immediately — same reason as handle_approve.
+    await callback.answer("Rejected ❌")
 
     image.status = ImageStatus.REJECTED
     image.reviewed_at = datetime.now(timezone.utc)
@@ -232,5 +236,3 @@ async def handle_reject(
             telegram_id=user.telegram_id,
             admin_base_url=config.webhook_base_url,
         )
-
-    await callback.answer("Rejected ❌")

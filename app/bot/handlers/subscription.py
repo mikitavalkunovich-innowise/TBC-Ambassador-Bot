@@ -79,7 +79,7 @@ async def send_subscription_prompt(
     await state.set_state(UserFlow.checking_subscription)
 
 
-@router.callback_query(UserFlow.checking_subscription, F.data == "sub:check")
+@router.callback_query(F.data == "sub:check")
 async def handle_subscription_check(
     callback: CallbackQuery,
     state: FSMContext,
@@ -96,6 +96,13 @@ async def handle_subscription_check(
         return
 
     lang = user.language.value if user.language else "ru"
+
+    # Guard: user must have accepted privacy but not yet passed the subscription gate.
+    # This covers FSM state loss after app restart — the DB flow_status is the source of truth.
+    # If the user is already past this step (VIDEO_SEEN or further), ignore silently.
+    if user.flow_status != FlowStatus.PRIVACY_ACCEPTED:
+        await callback.answer()
+        return
     channel_id = await settings_service.get(session, "telegram_channel_id") or ""
 
     if channel_id and not await _is_subscribed(bot, channel_id, tg_id):

@@ -47,7 +47,7 @@ async def send_disclaimer(
     await state.set_state(UserFlow.awaiting_privacy)
 
 
-@router.callback_query(UserFlow.awaiting_privacy, F.data == "privacy:agree")
+@router.callback_query(F.data == "privacy:agree")
 async def handle_privacy_agreed(
     callback: CallbackQuery,
     state: FSMContext,
@@ -59,6 +59,12 @@ async def handle_privacy_agreed(
 
     if user is None:
         await callback.answer("Please send /start first.")
+        return
+
+    # Guard: if privacy was already accepted, ignore silently (idempotent).
+    # This also handles FSM state loss after app restart — the DB is the source of truth.
+    if user.privacy_accepted:
+        await callback.answer()
         return
 
     user.privacy_accepted = True
