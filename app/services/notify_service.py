@@ -41,12 +41,13 @@ async def notify_new_image(
     attempt_number: int,
     max_attempts: int,
     admin_base_url: str,
-) -> tuple[int, int]:
+) -> tuple[int, int, str | None]:
     """
     Send the generated image to the admin for moderation.
 
     Returns:
-        (message_id, chat_id) for later editing the message on approve/reject.
+        (message_id, chat_id, photo_file_id) — photo_file_id can be saved to
+        avoid keeping the image on local disk after confirmation.
     """
     username_display = f"@{telegram_username}" if telegram_username else f"ID: {telegram_id}"
     caption = (
@@ -66,7 +67,8 @@ async def notify_new_image(
         reply_markup=keyboard,
         parse_mode="HTML",
     )
-    return msg.message_id, msg.chat.id
+    photo_file_id = msg.photo[-1].file_id if msg.photo else None
+    return msg.message_id, msg.chat.id, photo_file_id
 
 
 async def edit_approval_message_approved(

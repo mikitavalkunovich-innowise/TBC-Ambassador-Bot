@@ -29,6 +29,11 @@
         <img src="{{ item.image_url }}" class="card-img-top" alt="Generated"
              style="max-height: 240px; object-fit: cover;">
       </a>
+      {% elif item.has_telegram_backup %}
+      <div class="card-img-top bg-light d-flex flex-column align-items-center justify-content-center text-center p-3" style="height:120px;">
+        <i class="bi bi-telegram fs-3 text-primary"></i>
+        <small class="text-muted mt-1">Stored on Telegram servers.<br>Available in user's chat.</small>
+      </div>
       {% else %}
       <div class="card-img-top bg-secondary d-flex align-items-center justify-content-center" style="height:120px;">
         <span class="text-white small">No image</span>
@@ -57,6 +62,10 @@
           <a href="{{ item.user_photo_url }}" target="_blank">
             <img src="{{ item.user_photo_url }}" class="img-thumbnail" style="max-height:60px;">
           </a>
+        </div>
+        {% elif item.has_telegram_backup %}
+        <div class="mb-2">
+          <small class="text-muted"><i class="bi bi-telegram text-primary"></i> Selfie on Telegram servers</small>
         </div>
         {% endif %}
 

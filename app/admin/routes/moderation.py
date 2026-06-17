@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.admin.auth import get_current_admin
 from app.core.database import get_db_session
-from app.core.storage import relative_to_url
+from app.core.storage import get_absolute_path, relative_to_url
 from app.models.event import EventType
 from app.models.generation import GeneratedImage, ImageStatus
 from app.models.user import User
@@ -44,6 +44,19 @@ async def moderation_list(
 
     rows = (await session.execute(query)).scalars().all()
 
+    def _image_url(img: GeneratedImage, kind: str) -> str | None:
+        file_id = (
+            img.telegram_image_file_id if kind == "generated" else img.telegram_user_photo_file_id
+        )
+        local_path = img.image_path if kind == "generated" else img.user_photo_path
+        if file_id:
+            return f"/admin/media/telegram/{img.id}?kind={kind}"
+        if local_path:
+            abs_path = get_absolute_path(local_path)
+            if abs_path.exists():
+                return relative_to_url(local_path)
+        return None  # template shows "in Telegram" placeholder
+
     items = [
         {
             "id": img.id,
@@ -51,8 +64,9 @@ async def moderation_list(
             "attempt_number": img.attempt_number,
             "created_at": img.created_at,
             "reviewed_at": img.reviewed_at,
-            "image_url": relative_to_url(img.image_path) if img.image_path else None,
-            "user_photo_url": relative_to_url(img.user_photo_path) if img.user_photo_path else None,
+            "image_url": _image_url(img, "generated"),
+            "user_photo_url": _image_url(img, "user_photo"),
+            "has_telegram_backup": bool(img.telegram_image_file_id),
             "cost_usd": float(img.cost_usd) if img.cost_usd else None,
             "user_prompt_extra": img.user_prompt_extra,
             "user": {
@@ -129,7 +143,20 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
         lang = user.language.value if user.language else "ru"
         approved_text = await settings_service.get_text(session, "msg_approved", lang)
 
-        if image.image_path:
+        sent_photo = False
+        # Priority 1: resend via Telegram file_id
+        if image.telegram_image_file_id:
+            try:
+                await bot.send_photo(
+                    chat_id=user.telegram_id,
+                    photo=image.telegram_image_file_id,
+                    caption=approved_text,
+                )
+                sent_photo = True
+            except Exception:
+                logger.warning("file_id send failed for image %s, trying local file", image.id)
+        # Priority 2: local file
+        if not sent_photo and image.image_path:
             from app.core.storage import get_absolute_path
             from aiogram.types import FSInputFile
             img_path = get_absolute_path(image.image_path)
@@ -139,6 +166,9 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
                     photo=FSInputFile(str(img_path)),
                     caption=approved_text,
                 )
+                sent_photo = True
+        if not sent_photo:
+            await bot.send_message(chat_id=user.telegram_id, text=approved_text)
 
         # Optionally send the bonus Eldor video after the approved image
         video_enabled = await settings_service.get(session, "video_enabled") == "1"

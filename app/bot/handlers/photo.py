@@ -38,8 +38,13 @@ from app.models.user import FlowStatus, User
 from app.services import settings_service
 from app.services.ai_service import generate_composite_photo
 from app.services.analytics_service import track_event
-from app.services.image_service import composite_into_frame_if_available
+from app.services.image_service import composite_into_frame_if_available, compress_to_webp
 from app.services.notify_service import notify_budget_exceeded, notify_new_image
+from app.services.telegram_file_service import (
+    download_telegram_file_bytes,
+    purge_local_image_files,
+    verify_telegram_file,
+)
 
 router = Router(name="photo")
 logger = logging.getLogger(__name__)
@@ -125,6 +130,7 @@ async def _run_generation(
     extra_prompt: str,
     *,
     is_regeneration: bool = False,
+    user_photo_file_id: str | None = None,
 ) -> None:
     """AI call → frame/watermark → save → notify admin."""
     lang = user.language.value if user.language else "ru"
@@ -163,8 +169,10 @@ async def _run_generation(
 
     await track_event(session, user.id, EventType.GENERATION_REQUESTED)
 
-    user_photo_filename = generate_filename("user_photo.jpg")
-    user_photo_rel = await save_upload(user_photo_bytes, "user_photos", user_photo_filename)
+    # Compress user photo to WebP before saving to disk
+    user_photo_webp = compress_to_webp(user_photo_bytes)
+    user_photo_filename = generate_filename("user_photo.webp")
+    user_photo_rel = await save_upload(user_photo_webp, "user_photos", user_photo_filename)
 
     image_record = GeneratedImage(
         id=str(uuid.uuid4()),
@@ -173,6 +181,7 @@ async def _run_generation(
         attempt_number=attempt_number,
         user_photo_path=user_photo_rel,
         user_prompt_extra=extra_prompt or None,
+        telegram_user_photo_file_id=user_photo_file_id,
     )
     session.add(image_record)
     await session.flush()
@@ -191,9 +200,10 @@ async def _run_generation(
         if frame_path_rel:
             final_image = composite_into_frame_if_available(result.image_bytes, frame_path_rel)
         else:
-            final_image = result.image_bytes
+            # No frame — still compress to WebP for disk savings
+            final_image = compress_to_webp(result.image_bytes)
 
-        gen_filename = generate_filename("generated.jpg")
+        gen_filename = generate_filename("generated.webp")
         gen_rel_path = await save_upload(final_image, "generated", gen_filename)
 
         image_record.image_path = gen_rel_path
@@ -227,7 +237,7 @@ async def _run_generation(
 
         if admin_id_str:
             try:
-                msg_id, chat_id = await notify_new_image(
+                msg_id, chat_id, gen_file_id = await notify_new_image(
                     bot=bot,
                     admin_chat_id=int(admin_id_str),
                     image_id=image_record.id,
@@ -241,6 +251,15 @@ async def _run_generation(
                 )
                 image_record.admin_tg_message_id = msg_id
                 image_record.admin_tg_chat_id = chat_id
+                if gen_file_id:
+                    image_record.telegram_image_file_id = gen_file_id
+                    # Verify the file is accessible then purge local copy immediately
+                    if await verify_telegram_file(bot, gen_file_id):
+                        await purge_local_image_files(image_record)
+                        logger.info(
+                            "Local files purged immediately after confirmed TG upload (image_id=%s)",
+                            image_record.id,
+                        )
                 await session.flush()
             except Exception:
                 logger.exception("Failed to send admin notification")
@@ -310,6 +329,7 @@ async def handle_photo_upload(
         state=state,
         user_photo_bytes=photo_data,
         extra_prompt="",
+        user_photo_file_id=photo.file_id,
     )
 
 
@@ -380,7 +400,11 @@ async def handle_regen_photo(
     photo_bytes = await bot.download_file(file.file_path)
     photo_data = photo_bytes.read() if hasattr(photo_bytes, "read") else bytes(photo_bytes)
 
-    await state.update_data(regen_photo_bytes=list(photo_data), regen_extra_prompt=None)
+    await state.update_data(
+        regen_photo_bytes=list(photo_data),
+        regen_extra_prompt=None,
+        regen_user_photo_file_id=photo.file_id,
+    )
 
     lang = user.language.value if user.language else "ru"
     text = await settings_service.get_text(session, "msg_regen_ask_text", lang)
@@ -446,7 +470,8 @@ async def handle_regen_text(
 
     data = await state.get_data()
     raw_photo = data.get("regen_photo_bytes")
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+    regen_user_photo_file_id = data.get("regen_user_photo_file_id")
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None, regen_user_photo_file_id=None)
 
     await _run_regen(
         message=message,
@@ -456,6 +481,7 @@ async def handle_regen_text(
         state=state,
         raw_photo=raw_photo,
         extra_prompt=message.text or "",
+        regen_user_photo_file_id=regen_user_photo_file_id,
     )
 
 
@@ -480,7 +506,8 @@ async def handle_regen_text_skip(
 
     data = await state.get_data()
     raw_photo = data.get("regen_photo_bytes")
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+    regen_user_photo_file_id = data.get("regen_user_photo_file_id")
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None, regen_user_photo_file_id=None)
     await callback.message.edit_reply_markup(reply_markup=None)
 
     lang = user.language.value if user.language else "ru"
@@ -507,6 +534,7 @@ async def handle_regen_text_skip(
         state=state,
         raw_photo=raw_photo,
         extra_prompt="",
+        regen_user_photo_file_id=regen_user_photo_file_id,
     )
 
 
@@ -522,13 +550,20 @@ async def _run_regen(
     state: FSMContext,
     raw_photo: list[int] | None,
     extra_prompt: str,
+    regen_user_photo_file_id: str | None = None,
 ) -> None:
     """
     Resolve the stored photo (or fall back to the ambassador photo alone)
     then call _run_generation.
 
     raw_photo is stored as list[int] in FSM memory (JSON-serialisable).
+    If raw_photo is None, tries to reuse the previous selfie:
+      1. Read from local disk (user_photo_path)
+      2. Download from Telegram via telegram_user_photo_file_id
+      3. Ask user to send a new photo
     """
+    resolved_file_id: str | None = regen_user_photo_file_id
+
     if raw_photo is not None:
         photo_bytes = bytes(raw_photo)
     else:
@@ -542,19 +577,32 @@ async def _run_regen(
             .limit(1)
         )
         last_image = latest.scalar_one_or_none()
+        lang = user.language.value if user.language else "ru"
+
+        photo_bytes = None
+
+        # 1. Try local disk copy
         if last_image and last_image.user_photo_path:
             photo_path = get_absolute_path(last_image.user_photo_path)
             if photo_path.exists():
                 photo_bytes = photo_path.read_bytes()
-            else:
-                lang = user.language.value if user.language else "ru"
-                await message.answer(
-                    await settings_service.get_text(session, "msg_send_photo", lang)
-                )
-                await state.set_state(UserFlow.awaiting_photo)
-                return
-        else:
-            lang = user.language.value if user.language else "ru"
+                if not resolved_file_id:
+                    resolved_file_id = last_image.telegram_user_photo_file_id
+
+        # 2. Try downloading from Telegram
+        if photo_bytes is None and last_image and last_image.telegram_user_photo_file_id:
+            logger.info(
+                "Local selfie purged; downloading from Telegram for regen (image_id=%s)",
+                last_image.id,
+            )
+            photo_bytes = await download_telegram_file_bytes(
+                bot, last_image.telegram_user_photo_file_id
+            )
+            if not resolved_file_id:
+                resolved_file_id = last_image.telegram_user_photo_file_id
+
+        # 3. Fail — ask user for new photo
+        if photo_bytes is None:
             await message.answer(
                 await settings_service.get_text(session, "msg_send_photo", lang)
             )
@@ -570,4 +618,5 @@ async def _run_regen(
         user_photo_bytes=photo_bytes,
         extra_prompt=extra_prompt,
         is_regeneration=True,
+        user_photo_file_id=resolved_file_id,
     )

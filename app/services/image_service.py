@@ -18,6 +18,34 @@ logger = logging.getLogger(__name__)
 # --- Static frames bundled with the application ---
 _STATIC_FRAMES_DIR = Path(__file__).parent.parent / "static" / "frames"
 
+# ---------------------------------------------------------------------------
+# WebP compression
+# ---------------------------------------------------------------------------
+
+WEBP_QUALITY = 85
+WEBP_METHOD = 6          # slowest encoding = best compression ratio
+WEBP_MAX_SIDE = 2048     # resize if longest side exceeds this
+
+
+def compress_to_webp(
+    data: bytes,
+    quality: int = WEBP_QUALITY,
+    max_side: int = WEBP_MAX_SIDE,
+) -> bytes:
+    """
+    Convert any image bytes to WebP lossy.
+
+    Achieves 25–34% smaller files vs JPEG at the same visual quality.
+    Resizes proportionally if the longest side exceeds max_side.
+    """
+    with Image.open(io.BytesIO(data)) as img:
+        img = img.convert("RGB")
+        if max(img.size) > max_side:
+            img.thumbnail((max_side, max_side), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=quality, method=WEBP_METHOD)
+        return buf.getvalue()
+
 # Watermark fallback configuration
 LOGO_PADDING = 16
 LOGO_MAX_WIDTH = 120
@@ -82,10 +110,8 @@ def composite_into_frame(image_bytes: bytes, frame_bytes: bytes) -> bytes:
         hole = _find_transparent_box(frame)
 
         if hole is None:
-            logger.warning("Could not detect transparent area in frame template; returning original photo")
-            buf = io.BytesIO()
-            Image.open(io.BytesIO(image_bytes)).convert("RGB").save(buf, format="JPEG", quality=92)
-            return buf.getvalue()
+            logger.warning("Could not detect transparent area in frame template; returning compressed photo")
+            return compress_to_webp(image_bytes)
 
         bx, by, bx2, by2 = hole
         box_w, box_h = bx2 - bx, by2 - by
@@ -101,7 +127,7 @@ def composite_into_frame(image_bytes: bytes, frame_bytes: bytes) -> bytes:
         result = Image.alpha_composite(canvas, frame)
 
     buf = io.BytesIO()
-    result.convert("RGB").save(buf, format="JPEG", quality=92)
+    result.convert("RGB").save(buf, format="WEBP", quality=WEBP_QUALITY, method=WEBP_METHOD)
     return buf.getvalue()
 
 

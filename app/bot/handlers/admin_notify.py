@@ -39,7 +39,20 @@ async def _send_result_to_user(
 
     if approved:
         approved_text = await settings_service.get_text(session, "msg_approved", lang)
-        if image.image_path:
+        sent = False
+        # Priority 1: resend via Telegram file_id (no disk access needed)
+        if image.telegram_image_file_id:
+            try:
+                await bot.send_photo(
+                    chat_id=user.telegram_id,
+                    photo=image.telegram_image_file_id,
+                    caption=approved_text,
+                )
+                sent = True
+            except Exception:
+                logger.warning("Failed to send via file_id, falling back to local file")
+        # Priority 2: local file on disk
+        if not sent and image.image_path:
             from app.core.storage import get_absolute_path
             from aiogram.types import FSInputFile
             img_path = get_absolute_path(image.image_path)
@@ -49,9 +62,8 @@ async def _send_result_to_user(
                     photo=FSInputFile(str(img_path)),
                     caption=approved_text,
                 )
-            else:
-                await bot.send_message(chat_id=user.telegram_id, text=approved_text)
-        else:
+                sent = True
+        if not sent:
             await bot.send_message(chat_id=user.telegram_id, text=approved_text)
     else:
         rejection_text = await settings_service.get_text(session, "rejection_message", lang)

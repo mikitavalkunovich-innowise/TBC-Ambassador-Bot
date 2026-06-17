@@ -7,6 +7,7 @@ Serves:
   - GET  /media/*      — Uploaded file serving
   - GET  /health       — Railway health check
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -67,9 +68,20 @@ async def lifespan(app: FastAPI):
         app.state.bot = None
         app.state.dp = None
 
+    # Start background auto-purge task (48h cycle)
+    from app.tasks.purge_task import run_purge_loop
+    purge_task = asyncio.create_task(run_purge_loop(async_session_factory))
+
     yield
 
-    # Shutdown
+    # Shutdown background tasks
+    purge_task.cancel()
+    try:
+        await purge_task
+    except asyncio.CancelledError:
+        pass
+
+    # Shutdown bot
     if getattr(app.state, "bot", None):
         try:
             await app.state.bot.delete_webhook()

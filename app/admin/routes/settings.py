@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.storage import generate_filename, get_absolute_path, save_upload
 from app.services import settings_service
+from app.services.storage_service import cleanup_old_local_files, get_storage_stats
 from app.services.user_service import reset_user_flow
 
 router = APIRouter()
@@ -69,6 +70,14 @@ async def settings_page(
         }
         for k in MESSAGE_KEYS
     ]
+
+    storage_stats = None
+    if tab == "debug":
+        try:
+            storage_stats = await get_storage_stats(session)
+        except Exception:
+            logger.exception("Failed to load storage stats")
+
     return templates.TemplateResponse(
         "settings.html",
         {
@@ -78,6 +87,7 @@ async def settings_page(
             "active_page": "settings",
             "active_tab": tab,
             "saved": request.query_params.get("saved"),
+            "storage_stats": storage_stats,
         },
     )
 
@@ -151,6 +161,30 @@ async def reset_user_flow_route(
         f"&reset=ok&user_id={result.telegram_id}"
         f"&images={result.images_deleted}"
         f"&events={result.events_deleted}",
+        status_code=303,
+    )
+
+
+@router.post("/cleanup-storage", response_class=RedirectResponse, response_model=None)
+async def cleanup_storage_route(
+    older_than_days: str = Form("2"),
+    only_with_telegram_backup: str = Form("1"),
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    try:
+        days = max(1, int(older_than_days.strip()))
+    except ValueError:
+        return RedirectResponse("/admin/settings?tab=debug&error=invalid_days", status_code=303)
+
+    backup_only = only_with_telegram_backup == "1"
+    result = await cleanup_old_local_files(session, days, only_with_telegram_backup=backup_only)
+
+    return RedirectResponse(
+        "/admin/settings?tab=debug"
+        f"&cleanup=ok&purged={result.purged_count}"
+        f"&mb={result.mb_freed}"
+        f"&skipped={result.skipped_count}",
         status_code=303,
     )
 

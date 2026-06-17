@@ -55,6 +55,13 @@ class GeneratedImage(Base, TimestampMixin):
     admin_tg_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     admin_tg_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
+    # Telegram file_ids — persistent references to files on Telegram servers
+    telegram_image_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    telegram_user_photo_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    # Timestamp set when local disk files are purged (file_id remains usable)
+    local_files_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="images")

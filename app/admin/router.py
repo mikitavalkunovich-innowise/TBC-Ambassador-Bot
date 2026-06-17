@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.admin.auth import check_credentials, create_session, destroy_session, get_current_admin
-from app.admin.routes import analytics, dashboard, moderation, settings
+from app.admin.routes import analytics, dashboard, media_proxy, moderation, settings
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/admin/templates")
@@ -51,3 +51,4 @@ router.include_router(dashboard.router, prefix="")
 router.include_router(settings.router, prefix="/settings", tags=["settings"])
 router.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
 router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+router.include_router(media_proxy.router, tags=["media"])
