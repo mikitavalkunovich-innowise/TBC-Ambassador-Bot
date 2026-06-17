@@ -384,8 +384,8 @@ async def handle_regenerate_button(
 
     lang = user.language.value if user.language else "ru"
 
-    # Guard: user must have reached DONE state (result was delivered) and have remaining attempts
-    if user.flow_status not in (FlowStatus.DONE,):
+    # Guard: user must have received a result before regenerating
+    if user.flow_status != FlowStatus.DONE:
         await callback.answer()
         return
 

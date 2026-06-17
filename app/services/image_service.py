@@ -70,6 +70,7 @@ def compress_user_photo(data: bytes) -> bytes:
         max_side=WEBP_MAX_SIDE_USER_PHOTO,
     )
 
+
 # Watermark fallback configuration
 LOGO_PADDING = 16
 LOGO_MAX_WIDTH = 120
@@ -128,7 +129,7 @@ def composite_into_frame(image_bytes: bytes, frame_bytes: bytes) -> bytes:
     3. Build a full-frame canvas, place the cropped photo at the hole position,
        then alpha-composite the frame overlay on top so the branded border,
        logo, and hashtag text remain crisp above the photo.
-    4. Return JPEG bytes of the final portrait image.
+    4. Return WebP bytes of the final portrait image.
     """
     with Image.open(io.BytesIO(frame_bytes)).convert("RGBA") as frame:
         hole = _find_transparent_box(frame)
@@ -175,14 +176,14 @@ def composite_into_frame_if_available(
         path = _STATIC_FRAMES_DIR / path
 
     if not path.exists():
-        logger.warning("Frame file not found: %s", path)
-        return image_bytes
+        logger.warning("Frame file not found: %s — compressing without frame", path)
+        return compress_to_webp(image_bytes)
 
     try:
         return composite_into_frame(image_bytes, path.read_bytes())
     except Exception:
-        logger.exception("Frame compositing failed, returning original image")
-        return image_bytes
+        logger.exception("Frame compositing failed; compressing without frame")
+        return compress_to_webp(image_bytes)
 
 
 # ---------------------------------------------------------------------------

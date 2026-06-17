@@ -97,11 +97,7 @@ async def purge_user_photo_only(record: "GeneratedImage") -> int:
     """
     if not record.user_photo_path:
         return 0
-    freed = 0
-    try:
-        freed = await _unlink_if_exists(record.user_photo_path)
-    except Exception:
-        logger.warning("Failed to delete user photo file: %s", record.user_photo_path)
+    freed = await _unlink_if_exists(record.user_photo_path)
     record.user_photo_path = None
     return freed
 
