@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 MESSAGE_LABELS: dict[str, str] = {
     "msg_privacy": "Legal Disclaimer (text)",
     "btn_disclaimer_start": "Disclaimer — Start button label",
+    "msg_extra_photo_prompt": "Extra photos — invitation after main selfie",
+    "msg_extra_photo_added": "Extra photos — confirmation ({n} = photo number)",
+    "msg_regen_ask_your_photo": "Regen step 1 — request YOUR selfie (not ambassador)",
+    "msg_regen_ask_extra_photos": "Regen step 1b — request extra angle photos",
+    "btn_extra_photo_done": "Extra photos — Done button label",
+    "btn_extra_photo_skip": "Extra photos — Skip button label",
 }
 
 # All message keys managed on the Messages tab
@@ -33,15 +39,20 @@ MESSAGE_KEYS = [
     "btn_disclaimer_start",
     "msg_subscribe",
     "msg_not_subscribed",
-    "msg_send_photo",           # first photo request
+    "msg_send_photo",               # first photo request
+    "msg_extra_photo_prompt",       # extra angle photos invitation (first gen)
+    "msg_extra_photo_added",        # confirmation after each extra photo
+    "btn_extra_photo_skip",         # Skip button (before any extra added)
+    "btn_extra_photo_done",         # Done button (after at least one extra added)
     "msg_invalid_photo",
     "msg_generating",
     "msg_pending_review",
     "msg_approved",
-    "msg_video",                # bonus video after approval
-    "msg_regenerate_prompt",    # «Generate new» offer
-    "msg_regen_ask_photo",      # regen step 1: new selfie or skip
-    "msg_regen_ask_text",       # regen step 2: text or skip
+    "msg_video",                    # bonus video after approval
+    "msg_regenerate_prompt",        # «Generate new» offer
+    "msg_regen_ask_your_photo",     # regen step 1: YOUR selfie (not ambassador)
+    "msg_regen_ask_extra_photos",   # regen step 1b: extra angle photos
+    "msg_regen_ask_text",           # regen step 2: text or skip
     "msg_regen_nothing_changed",
     "msg_already_participated",
     "msg_no_attempts_left",

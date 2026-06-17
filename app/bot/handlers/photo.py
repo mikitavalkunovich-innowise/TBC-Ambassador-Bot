@@ -2,17 +2,21 @@
 Photo upload and image generation handler.
 
 First generation:
-  awaiting_photo  →  user sends selfie  →  _run_generation()
+  awaiting_photo        →  user sends main selfie
+  awaiting_extra_photos →  collect up to MAX_EXTRA_PHOTOS additional angle photos (optional)
+                        →  Skip / Done / max reached  →  _run_generation(photos_list)
 
-Regeneration (sequential, both steps optional):
+Regeneration (sequential, all steps optional):
   awaiting_regeneration_input
     → user presses «Generate new»
-  awaiting_regen_photo  (step 1: new selfie or Skip)
-    → photo received  →  store file_id in FSM  →  awaiting_regen_text
-    → Skip            →  awaiting_regen_text (no_photo flag)
-  awaiting_regen_text   (step 2: text description or Skip)
-    → text received   →  store text  →  _run_generation()
-    → Skip + had photo →  _run_generation() with stored photo, no text
+  awaiting_regen_photo         (step 1: new main selfie or Skip)
+    → photo received  →  store file_id  →  awaiting_regen_extra_photos
+    → Skip            →  awaiting_regen_text (no new photo, skip extra-angles too)
+  awaiting_regen_extra_photos  (step 1b: additional angle photos or Skip/Done)
+    → photo / Skip / Done  →  awaiting_regen_text
+  awaiting_regen_text          (step 2: text description or Skip)
+    → text received   →  _run_generation()
+    → Skip + had photo →  _run_generation() with stored photos, no text
     → Skip + no photo  →  «nothing changed» message, back to awaiting_regeneration_input
 """
 import logging
@@ -25,7 +29,7 @@ from aiogram.types import CallbackQuery, Message, PhotoSize
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards.builders import regenerate_keyboard, skip_keyboard
+from app.bot.keyboards.builders import extra_photos_keyboard, regenerate_keyboard, skip_keyboard
 from app.bot.states import UserFlow
 from app.core.storage import (
     generate_filename,
@@ -48,6 +52,8 @@ from app.services.telegram_file_service import download_telegram_file_bytes
 
 router = Router(name="photo")
 logger = logging.getLogger(__name__)
+
+MAX_EXTRA_PHOTOS = 2  # max additional angle photos per generation (total = 1 main + 2 extras)
 
 
 # ---------------------------------------------------------------------------
@@ -126,13 +132,17 @@ async def _run_generation(
     user: User,
     session: AsyncSession,
     state: FSMContext,
-    user_photo_bytes: bytes,
+    user_photo_bytes_list: list[bytes],
     extra_prompt: str,
     *,
     is_regeneration: bool = False,
     user_photo_file_id: str | None = None,
 ) -> None:
-    """AI call → frame/watermark → save → notify admin."""
+    """AI call → frame/watermark → save → notify admin.
+
+    user_photo_bytes_list: main selfie first, optional extra angles after.
+    Only the first photo is persisted to disk (regen fallback); extras are ephemeral.
+    """
     lang = user.language.value if user.language else "ru"
 
     if not await _check_and_enforce_budget(session, bot, user):
@@ -169,9 +179,10 @@ async def _run_generation(
 
     await track_event(session, user.id, EventType.GENERATION_REQUESTED)
 
-    # Compress user selfie for temporary disk storage.
-    # Original bytes are kept in-memory for AI — the stored copy is only a regen fallback.
-    user_photo_webp = compress_user_photo(user_photo_bytes)
+    # Persist only the main (first) selfie to disk as a regen fallback.
+    # Extra angle photos are used only for the AI call and are not stored.
+    main_photo_bytes = user_photo_bytes_list[0]
+    user_photo_webp = compress_user_photo(main_photo_bytes)
     user_photo_filename = generate_filename("user_photo.webp")
     user_photo_rel = await save_upload(user_photo_webp, "user_photos", user_photo_filename)
 
@@ -191,7 +202,7 @@ async def _run_generation(
         prompt_template = await settings_service.get(session, "generation_prompt") or ""
 
         result = await generate_composite_photo(
-            user_photo_bytes=user_photo_bytes,
+            user_photo_bytes_list=user_photo_bytes_list,
             ambassador_photo_bytes=ambassador_bytes,
             prompt_template=prompt_template,
             extra_prompt=extra_prompt,
@@ -303,7 +314,7 @@ async def handle_photo_upload(
     session: AsyncSession,
     bot: Bot,
 ) -> None:
-    """Handle selfie photo from user (first attempt)."""
+    """Handle main selfie from user (first attempt). Move to extra-photos collection."""
     tg_id = message.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -311,20 +322,13 @@ async def handle_photo_upload(
         return
 
     photo: PhotoSize = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    photo_bytes = await bot.download_file(file.file_path)
-    photo_data = photo_bytes.read() if hasattr(photo_bytes, "read") else bytes(photo_bytes)
+    # Store file_id only; bytes are downloaded right before generation to avoid OOM.
+    await state.update_data(main_photo_file_id=photo.file_id, extra_photo_file_ids=[])
 
-    await _run_generation(
-        message=message,
-        bot=bot,
-        user=user,
-        session=session,
-        state=state,
-        user_photo_bytes=photo_data,
-        extra_prompt="",
-        user_photo_file_id=photo.file_id,
-    )
+    lang = user.language.value if user.language else "ru"
+    prompt_text = await settings_service.get_text(session, "msg_extra_photo_prompt", lang)
+    await message.answer(prompt_text, reply_markup=extra_photos_keyboard(lang, has_photo=False))
+    await state.set_state(UserFlow.awaiting_extra_photos)
 
 
 @router.message(UserFlow.awaiting_photo, ~F.photo)
@@ -333,6 +337,123 @@ async def handle_invalid_photo(
     session: AsyncSession,
 ) -> None:
     """User sent something other than a photo."""
+    tg_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    lang = user.language.value if user and user.language else "ru"
+    text = await settings_service.get_text(session, "msg_invalid_photo", lang)
+    await message.answer(text)
+
+
+# ---------------------------------------------------------------------------
+# Extra photos collection (first generation)
+# ---------------------------------------------------------------------------
+
+async def _resolve_and_run_generation(
+    message: Message,
+    bot: Bot,
+    user: User,
+    session: AsyncSession,
+    state: FSMContext,
+    *,
+    is_regeneration: bool = False,
+) -> None:
+    """Download all collected photos from Telegram and launch _run_generation."""
+    data = await state.get_data()
+    main_fid: str | None = data.get("main_photo_file_id")
+    extra_fids: list[str] = data.get("extra_photo_file_ids") or []
+
+    if main_fid is None:
+        # Should not happen in normal flow — guard
+        lang = user.language.value if user.language else "ru"
+        await message.answer(await settings_service.get_text(session, "msg_send_photo", lang))
+        await state.set_state(UserFlow.awaiting_photo)
+        return
+
+    main_bytes = await download_telegram_file_bytes(bot, main_fid)
+    if main_bytes is None:
+        lang = user.language.value if user.language else "ru"
+        await message.answer(await settings_service.get_text(session, "msg_send_photo", lang))
+        await state.set_state(UserFlow.awaiting_photo)
+        return
+
+    extras: list[bytes] = []
+    for fid in extra_fids:
+        b = await download_telegram_file_bytes(bot, fid)
+        if b:
+            extras.append(b)
+
+    await _run_generation(
+        message=message,
+        bot=bot,
+        user=user,
+        session=session,
+        state=state,
+        user_photo_bytes_list=[main_bytes] + extras,
+        extra_prompt="",
+        is_regeneration=is_regeneration,
+        user_photo_file_id=main_fid,
+    )
+
+
+@router.message(UserFlow.awaiting_extra_photos, F.photo)
+async def handle_extra_photo(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """User sent an additional angle photo during the extra-photos step."""
+    tg_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return
+
+    lang = user.language.value if user.language else "ru"
+    data = await state.get_data()
+    extra_fids: list[str] = list(data.get("extra_photo_file_ids") or [])
+
+    photo: PhotoSize = message.photo[-1]
+    extra_fids.append(photo.file_id)
+    await state.update_data(extra_photo_file_ids=extra_fids)
+
+    if len(extra_fids) >= MAX_EXTRA_PHOTOS:
+        # Max reached — proceed to generation automatically
+        await _resolve_and_run_generation(message, bot, user, session, state)
+    else:
+        n = len(extra_fids)  # already appended above, so count matches human expectation
+        raw = await settings_service.get_text(session, "msg_extra_photo_added", lang)
+        text = raw.format(n=n) if "{n}" in raw else raw
+        await message.answer(text, reply_markup=extra_photos_keyboard(lang, has_photo=True))
+
+
+@router.callback_query(UserFlow.awaiting_extra_photos, F.data.in_({"extra:skip", "extra:done"}))
+async def handle_extra_photos_done(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """User pressed Skip or Done — proceed with photos collected so far."""
+    tg_id = callback.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        await callback.answer()
+        return
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer()
+    await _resolve_and_run_generation(callback.message, bot, user, session, state)
+
+
+@router.message(UserFlow.awaiting_extra_photos, ~F.photo)
+async def handle_extra_photo_invalid(
+    message: Message,
+    session: AsyncSession,
+) -> None:
+    """User sent a non-photo message during extra-photos step."""
     tg_id = message.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -393,7 +514,7 @@ async def handle_regenerate_button(
     # Clear any stale regen data from a previous flow
     await state.update_data(regen_photo_file_id=None, regen_user_photo_file_id=None)
 
-    text = await settings_service.get_text(session, "msg_regen_ask_photo", lang)
+    text = await settings_service.get_text(session, "msg_regen_ask_your_photo", lang)
     await callback.message.answer(text, reply_markup=skip_keyboard(lang))
     await state.set_state(UserFlow.awaiting_regen_photo)
     await callback.answer()
@@ -410,7 +531,7 @@ async def handle_regen_photo(
     session: AsyncSession,
     bot: Bot,
 ) -> None:
-    """User sent a new selfie — store it, proceed to step 2 (text)."""
+    """User sent a new main selfie — store it, offer extra angles (step 1b)."""
     tg_id = message.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -419,18 +540,17 @@ async def handle_regen_photo(
 
     photo: PhotoSize = message.photo[-1]
 
-    # Store only the file_id — bytes are downloaded right before generation.
-    # Storing raw bytes as list[int] in MemoryStorage wastes ~10–15 MB per user
-    # and can trigger OOM restarts that silently wipe the FSM state.
+    # Store only the file_id to avoid OOM in MemoryStorage.
     await state.update_data(
         regen_photo_file_id=photo.file_id,
         regen_user_photo_file_id=photo.file_id,
+        regen_extra_photo_file_ids=[],
     )
 
     lang = user.language.value if user.language else "ru"
-    text = await settings_service.get_text(session, "msg_regen_ask_text", lang)
-    await message.answer(text, reply_markup=skip_keyboard(lang))
-    await state.set_state(UserFlow.awaiting_regen_text)
+    text = await settings_service.get_text(session, "msg_regen_ask_extra_photos", lang)
+    await message.answer(text, reply_markup=extra_photos_keyboard(lang, has_photo=False))
+    await state.set_state(UserFlow.awaiting_regen_extra_photos)
 
 
 @router.callback_query(UserFlow.awaiting_regen_photo, F.data == "regen:skip")
@@ -439,7 +559,7 @@ async def handle_regen_photo_skip(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """User skipped the new photo step — proceed to step 2 (text)."""
+    """User skipped the new photo step — skip extra angles too, go straight to text."""
     tg_id = callback.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -447,7 +567,11 @@ async def handle_regen_photo_skip(
         await callback.answer()
         return
 
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+    await state.update_data(
+        regen_photo_file_id=None,
+        regen_user_photo_file_id=None,
+        regen_extra_photo_file_ids=[],
+    )
     await callback.message.edit_reply_markup(reply_markup=None)
 
     lang = user.language.value if user.language else "ru"
@@ -463,6 +587,82 @@ async def handle_regen_photo_invalid(
     session: AsyncSession,
 ) -> None:
     """User sent a non-photo message during the photo step — remind them."""
+    tg_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    lang = user.language.value if user and user.language else "ru"
+    text = await settings_service.get_text(session, "msg_invalid_photo", lang)
+    await message.answer(text)
+
+
+# ---------------------------------------------------------------------------
+# Regeneration step 1b: extra angle photos (or Skip/Done)
+# ---------------------------------------------------------------------------
+
+@router.message(UserFlow.awaiting_regen_extra_photos, F.photo)
+async def handle_regen_extra_photo(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """User sent an extra-angle photo during regen — store and possibly advance."""
+    tg_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return
+
+    lang = user.language.value if user.language else "ru"
+    data = await state.get_data()
+    extra_fids: list[str] = list(data.get("regen_extra_photo_file_ids") or [])
+
+    photo: PhotoSize = message.photo[-1]
+    extra_fids.append(photo.file_id)
+    await state.update_data(regen_extra_photo_file_ids=extra_fids)
+
+    if len(extra_fids) >= MAX_EXTRA_PHOTOS:
+        # Max reached — move on to text step
+        text = await settings_service.get_text(session, "msg_regen_ask_text", lang)
+        await message.answer(text, reply_markup=skip_keyboard(lang))
+        await state.set_state(UserFlow.awaiting_regen_text)
+    else:
+        n = len(extra_fids)  # already appended above
+        raw = await settings_service.get_text(session, "msg_extra_photo_added", lang)
+        text = raw.format(n=n) if "{n}" in raw else raw
+        await message.answer(text, reply_markup=extra_photos_keyboard(lang, has_photo=True))
+
+
+@router.callback_query(
+    UserFlow.awaiting_regen_extra_photos,
+    F.data.in_({"extra:skip", "extra:done"}),
+)
+async def handle_regen_extra_done(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """User is done with extra photos — proceed to text step."""
+    tg_id = callback.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == tg_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        await callback.answer()
+        return
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    lang = user.language.value if user.language else "ru"
+    text = await settings_service.get_text(session, "msg_regen_ask_text", lang)
+    await callback.message.answer(text, reply_markup=skip_keyboard(lang))
+    await state.set_state(UserFlow.awaiting_regen_text)
+    await callback.answer()
+
+
+@router.message(UserFlow.awaiting_regen_extra_photos, ~F.photo)
+async def handle_regen_extra_invalid(
+    message: Message,
+    session: AsyncSession,
+) -> None:
     tg_id = message.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -492,7 +692,12 @@ async def handle_regen_text(
     data = await state.get_data()
     regen_photo_file_id = data.get("regen_photo_file_id")
     regen_user_photo_file_id = data.get("regen_user_photo_file_id")
-    await state.update_data(regen_photo_file_id=None, regen_user_photo_file_id=None)
+    regen_extra_photo_file_ids = data.get("regen_extra_photo_file_ids") or []
+    await state.update_data(
+        regen_photo_file_id=None,
+        regen_user_photo_file_id=None,
+        regen_extra_photo_file_ids=[],
+    )
 
     await _run_regen(
         message=message,
@@ -503,6 +708,7 @@ async def handle_regen_text(
         regen_photo_file_id=regen_photo_file_id,
         extra_prompt=message.text or "",
         regen_user_photo_file_id=regen_user_photo_file_id,
+        regen_extra_photo_file_ids=regen_extra_photo_file_ids,
     )
 
 
@@ -528,7 +734,12 @@ async def handle_regen_text_skip(
     data = await state.get_data()
     regen_photo_file_id = data.get("regen_photo_file_id")
     regen_user_photo_file_id = data.get("regen_user_photo_file_id")
-    await state.update_data(regen_photo_file_id=None, regen_user_photo_file_id=None)
+    regen_extra_photo_file_ids = data.get("regen_extra_photo_file_ids") or []
+    await state.update_data(
+        regen_photo_file_id=None,
+        regen_user_photo_file_id=None,
+        regen_extra_photo_file_ids=[],
+    )
     await callback.message.edit_reply_markup(reply_markup=None)
 
     lang = user.language.value if user.language else "ru"
@@ -556,6 +767,7 @@ async def handle_regen_text_skip(
         regen_photo_file_id=regen_photo_file_id,
         extra_prompt="",
         regen_user_photo_file_id=regen_user_photo_file_id,
+        regen_extra_photo_file_ids=regen_extra_photo_file_ids,
     )
 
 
@@ -572,32 +784,31 @@ async def _run_regen(
     regen_photo_file_id: str | None,
     extra_prompt: str,
     regen_user_photo_file_id: str | None = None,
+    regen_extra_photo_file_ids: list[str] | None = None,
 ) -> None:
     """
-    Resolve the selfie to use for regeneration then call _run_generation.
+    Resolve the selfies to use for regeneration then call _run_generation.
 
-    Priority:
+    Priority for the main selfie:
       1. regen_photo_file_id — user uploaded a NEW selfie in step 1; download it.
       2. DB fallback — user skipped step 1; reuse their last submitted selfie.
          a. Local disk copy (user_photo_path)
          b. Telegram download via telegram_user_photo_file_id
       3. Ask user to send a new photo (all sources exhausted).
 
-    Photo bytes are never stored in FSM — only the Telegram file_id is kept.
-    Storing raw bytes as list[int] in MemoryStorage used 10–15 MB per user
-    and could trigger OOM restarts that silently cleared the FSM state.
+    Extra angle photos (regen_extra_photo_file_ids) are downloaded if available.
+    Photo bytes are never stored in FSM — only Telegram file_ids are kept.
     """
     lang = user.language.value if user.language else "ru"
     resolved_file_id: str | None = regen_user_photo_file_id
+    main_photo_bytes: bytes | None = None
 
     if regen_photo_file_id is not None:
-        # User uploaded a new selfie — download it fresh from Telegram
         logger.info("Downloading regen selfie from Telegram (file_id=%s)", regen_photo_file_id)
-        photo_bytes = await download_telegram_file_bytes(bot, regen_photo_file_id)
-        if photo_bytes is None:
-            # Download failed — fall back to the previous selfie
+        main_photo_bytes = await download_telegram_file_bytes(bot, regen_photo_file_id)
+        if main_photo_bytes is None:
             logger.warning("Could not download regen selfie; falling back to previous")
-            regen_photo_file_id = None  # trigger the fallback branch below
+            regen_photo_file_id = None
         else:
             resolved_file_id = regen_photo_file_id
 
@@ -613,35 +824,40 @@ async def _run_regen(
         )
         last_image = latest.scalar_one_or_none()
 
-        photo_bytes = None
-
         # 2a. Try local disk copy
         if last_image and last_image.user_photo_path:
             photo_path = get_absolute_path(last_image.user_photo_path)
             if photo_path.exists():
-                photo_bytes = photo_path.read_bytes()
+                main_photo_bytes = photo_path.read_bytes()
                 if not resolved_file_id:
                     resolved_file_id = last_image.telegram_user_photo_file_id
 
-        # 2b. Local file missing (purged or never saved) — download from Telegram
-        if photo_bytes is None and last_image and last_image.telegram_user_photo_file_id:
+        # 2b. Local file missing — download from Telegram
+        if main_photo_bytes is None and last_image and last_image.telegram_user_photo_file_id:
             logger.info(
                 "Local selfie not on disk; downloading from Telegram for regen (image_id=%s)",
                 last_image.id,
             )
-            photo_bytes = await download_telegram_file_bytes(
+            main_photo_bytes = await download_telegram_file_bytes(
                 bot, last_image.telegram_user_photo_file_id
             )
             if not resolved_file_id:
                 resolved_file_id = last_image.telegram_user_photo_file_id
 
-        # 3. Exhausted — ask user to send a new photo
-        if photo_bytes is None:
+        # 3. All sources exhausted — ask for a new photo
+        if main_photo_bytes is None:
             await message.answer(
                 await settings_service.get_text(session, "msg_send_photo", lang)
             )
             await state.set_state(UserFlow.awaiting_photo)
             return
+
+    # Download extra angle photos (best-effort; failures are silently skipped)
+    extra_bytes: list[bytes] = []
+    for fid in (regen_extra_photo_file_ids or []):
+        b = await download_telegram_file_bytes(bot, fid)
+        if b:
+            extra_bytes.append(b)
 
     await _run_generation(
         message=message,
@@ -649,7 +865,7 @@ async def _run_regen(
         user=user,
         session=session,
         state=state,
-        user_photo_bytes=photo_bytes,
+        user_photo_bytes_list=[main_photo_bytes] + extra_bytes,
         extra_prompt=extra_prompt,
         is_regeneration=True,
         user_photo_file_id=resolved_file_id,

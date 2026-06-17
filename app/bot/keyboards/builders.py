@@ -67,3 +67,20 @@ def skip_keyboard(lang: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=label, callback_data="regen:skip")
     return builder.as_markup()
+
+
+def extra_photos_keyboard(lang: str, has_photo: bool) -> InlineKeyboardMarkup:
+    """
+    Keyboard for the extra-photos collection step.
+
+    has_photo=False  →  only Skip button (no extra photo added yet)
+    has_photo=True   →  Done button + Skip button (at least one extra photo added)
+    """
+    builder = InlineKeyboardBuilder()
+    if has_photo:
+        done_label = "✅ Готово, генерировать" if lang == "ru" else "✅ Tayyor, yaratish"
+        builder.button(text=done_label, callback_data="extra:done")
+    skip_label = "⏭ Пропустить" if lang == "ru" else "⏭ O'tkazib yuborish"
+    builder.button(text=skip_label, callback_data="extra:skip")
+    builder.adjust(1)
+    return builder.as_markup()

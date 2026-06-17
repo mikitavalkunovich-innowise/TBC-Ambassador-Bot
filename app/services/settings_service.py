@@ -41,6 +41,44 @@ DEFAULT_SETTINGS: dict[str, str] = {
     # Admins can override by uploading custom frames via the Media settings tab.
     "frame_path_ru": "frame_ru.png",
     "frame_path_uz": "frame_uz.png",
+    # --- Extra photo collection messages (multi-angle flow) ---
+    "msg_extra_photo_prompt_ru": (
+        "📸 Для более точного результата вы можете прислать 1–2 дополнительных фото с другого ракурса "
+        "(например, вполоборота или при другом освещении). Это поможет AI лучше сохранить ваши черты лица.\n\n"
+        "Или нажмите «Пропустить», чтобы продолжить с одним фото."
+    ),
+    "msg_extra_photo_prompt_uz": (
+        "📸 Yaxshiroq natija uchun boshqa burchakdan 1–2 ta qo'shimcha rasm yuborishingiz mumkin "
+        "(masalan, yonga burilgan holda yoki boshqa yoritishda). Bu AI'ga yuz xususiyatlaringizni "
+        "aniqroq saqlashga yordam beradi.\n\n"
+        "Yoki bitta rasm bilan davom etish uchun «O'tkazib yuborish» tugmasini bosing."
+    ),
+    "msg_extra_photo_added_ru": (
+        "✅ Фото {n} принято! Вы можете прислать ещё одно или нажать «Готово»."
+    ),
+    "msg_extra_photo_added_uz": (
+        "✅ {n}-rasm qabul qilindi! Yana bitta rasm yuborishingiz yoki «Tayyor» tugmasini bosishingiz mumkin."
+    ),
+    "msg_regen_ask_your_photo_ru": (
+        "📸 Хотите загрузить новое фото?\n"
+        "Пришлите ВАШЕ фото (не фото амбассадора) или нажмите «Пропустить»."
+    ),
+    "msg_regen_ask_your_photo_uz": (
+        "📸 Yangi rasm yuklashni xohlaysizmi?\n"
+        "O'ZINGIZNING rasmingizni yuboring (elchi rasmi emas) yoki «O'tkazib yuborish» tugmasini bosing."
+    ),
+    "msg_regen_ask_extra_photos_ru": (
+        "📸 Хотите добавить фото с другого ракурса для лучшего результата?\n"
+        "Пришлите дополнительное фото или нажмите «Пропустить»."
+    ),
+    "msg_regen_ask_extra_photos_uz": (
+        "📸 Yaxshiroq natija uchun boshqa burchakdan rasm qo'shmoqchimisiz?\n"
+        "Qo'shimcha rasm yuboring yoki «O'tkazib yuborish» tugmasini bosing."
+    ),
+    "btn_extra_photo_done_ru": "✅ Готово, генерировать",
+    "btn_extra_photo_done_uz": "✅ Tayyor, yaratish",
+    "btn_extra_photo_skip_ru": "⏭ Пропустить",
+    "btn_extra_photo_skip_uz": "⏭ O'tkazib yuborish",
     # Image generation prompt template
     "generation_prompt": (
         "Create a natural, realistic photo of two people standing together and posing for a photo, "

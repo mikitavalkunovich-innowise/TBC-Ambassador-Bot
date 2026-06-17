@@ -44,7 +44,7 @@ def _calculate_cost(input_tokens: int) -> Decimal:
 
 
 async def generate_composite_photo(
-    user_photo_bytes: bytes,
+    user_photo_bytes_list: list[bytes],
     ambassador_photo_bytes: bytes,
     prompt_template: str,
     extra_prompt: str = "",
@@ -53,7 +53,9 @@ async def generate_composite_photo(
     Generate a composite photo of the user and the TBC ambassador.
 
     Args:
-        user_photo_bytes: JPEG bytes of the user's selfie.
+        user_photo_bytes_list: One or more JPEG selfies of the user (main + optional extra angles).
+                               Multiple photos improve likeness accuracy, especially for
+                               Turkic / Central Asian facial features.
         ambassador_photo_bytes: JPEG bytes of the ambassador's reference photo.
         prompt_template: Generation prompt template (may contain {extra} placeholder).
         extra_prompt: Optional additional instructions from the user.
@@ -64,30 +66,40 @@ async def generate_composite_photo(
     settings = get_settings()
     client = genai.Client(api_key=settings.google_ai_api_key)
 
-    # Build the prompt
-    prompt_text = prompt_template.format(extra=extra_prompt or "").strip()
-
-    # Build contents: text prompt + two reference images
-    contents = [
-        types.Content(
-            role="user",
-            parts=[
-                types.Part(text=prompt_text),
-                types.Part(
-                    inline_data=types.Blob(
-                        mime_type="image/jpeg",
-                        data=user_photo_bytes,
-                    )
-                ),
-                types.Part(
-                    inline_data=types.Blob(
-                        mime_type="image/jpeg",
-                        data=ambassador_photo_bytes,
-                    )
-                ),
-            ],
+    # Build the prompt — prepend a multi-photo identity header when extra angles are provided
+    n = len(user_photo_bytes_list)
+    if n > 1:
+        identity_header = (
+            f"IDENTITY REFERENCE: The user (Person 1) is shown in the first {n} photos provided "
+            f"— use all {n} together to accurately reconstruct their exact facial features, "
+            f"bone structure, skin tone, and hair. The ambassador (Person 2) is in the last photo."
         )
-    ]
+        raw_prompt = prompt_template.format(extra=extra_prompt or "").strip()
+        prompt_text = identity_header + "\n\n" + raw_prompt
+    else:
+        prompt_text = prompt_template.format(extra=extra_prompt or "").strip()
+
+    # Build parts: text prompt → all user photos → ambassador photo
+    parts: list[types.Part] = [types.Part(text=prompt_text)]
+    for photo_bytes in user_photo_bytes_list:
+        parts.append(
+            types.Part(
+                inline_data=types.Blob(
+                    mime_type="image/jpeg",
+                    data=photo_bytes,
+                )
+            )
+        )
+    parts.append(
+        types.Part(
+            inline_data=types.Blob(
+                mime_type="image/jpeg",
+                data=ambassador_photo_bytes,
+            )
+        )
+    )
+
+    contents = [types.Content(role="user", parts=parts)]
 
     logger.info("Sending image generation request to gemini-3-pro-image")
 
@@ -114,7 +126,8 @@ async def generate_composite_photo(
 
     # Extract token usage for cost tracking
     usage = response.usage_metadata
-    input_tokens = usage.prompt_token_count if usage else (2 * TOKENS_PER_INPUT_IMAGE + 300)
+    total_images = len(user_photo_bytes_list) + 1  # user photos + ambassador
+    input_tokens = usage.prompt_token_count if usage else (total_images * TOKENS_PER_INPUT_IMAGE + 300)
     output_tokens = usage.candidates_token_count if usage else 1120
 
     cost = _calculate_cost(input_tokens)
