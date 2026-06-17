@@ -1,9 +1,9 @@
 """
-Utilities for Telegram file_id management.
+Utilities for Telegram file management.
 
-Captures file_ids from send_photo responses, verifies file accessibility,
-downloads file bytes for reuse (e.g. regen without local selfie), and
-purges local disk copies once a Telegram backup is confirmed.
+Downloads file bytes by file_id (used as regen fallback when the local selfie
+is no longer on disk) and purges local disk copies once a Telegram backup is
+confirmed.
 """
 import asyncio
 import logging
@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 import httpx
 from aiogram import Bot
-from aiogram.types import Message
 
 from app.core.storage import get_absolute_path
 
@@ -21,14 +20,6 @@ if TYPE_CHECKING:
     from app.models.generation import GeneratedImage
 
 logger = logging.getLogger(__name__)
-
-
-def capture_photo_file_id(msg: Message) -> str | None:
-    """Extract the file_id of the largest photo from a send_photo() response."""
-    if msg.photo:
-        return msg.photo[-1].file_id
-    return None
-
 
 
 async def download_telegram_file_bytes(bot: Bot, file_id: str) -> bytes | None:

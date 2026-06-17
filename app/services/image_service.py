@@ -71,11 +71,6 @@ def compress_user_photo(data: bytes) -> bytes:
     )
 
 
-# Watermark fallback configuration
-LOGO_PADDING = 16
-LOGO_MAX_WIDTH = 120
-LOGO_MAX_HEIGHT = 80
-
 _MIN_WHITE_BOX_PX = 100  # minimum side length to accept a detected transparent hole
 
 
@@ -184,43 +179,3 @@ def composite_into_frame_if_available(
     except Exception:
         logger.exception("Frame compositing failed; compressing without frame")
         return compress_to_webp(image_bytes)
-
-
-# ---------------------------------------------------------------------------
-# Logo watermark (fallback)
-# ---------------------------------------------------------------------------
-
-def add_logo_watermark(image_bytes: bytes, logo_bytes: bytes) -> bytes:
-    """Overlay the TBC logo in the top-right corner of the generated image."""
-    with Image.open(io.BytesIO(image_bytes)).convert("RGBA") as base:
-        with Image.open(io.BytesIO(logo_bytes)).convert("RGBA") as logo:
-            logo_w, logo_h = logo.size
-            scale = min(LOGO_MAX_WIDTH / logo_w, LOGO_MAX_HEIGHT / logo_h, 1.0)
-            new_w, new_h = int(logo_w * scale), int(logo_h * scale)
-            logo = logo.resize((new_w, new_h), Image.LANCZOS)
-
-            pos_x = base.width - new_w - LOGO_PADDING
-            pos_y = LOGO_PADDING
-
-            overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-            overlay.paste(logo, (pos_x, pos_y), mask=logo)
-            result = Image.alpha_composite(base, overlay)
-
-        buf = io.BytesIO()
-        result.convert("RGB").save(buf, format="JPEG", quality=90)
-        return buf.getvalue()
-
-
-def add_logo_watermark_if_available(image_bytes: bytes, logo_path: str | None) -> bytes:
-    """Apply logo watermark only if the file exists; return original bytes otherwise."""
-    if not logo_path:
-        return image_bytes
-    full_path = Path(logo_path)
-    if not full_path.exists():
-        logger.warning("Logo file not found at %s, skipping watermark", logo_path)
-        return image_bytes
-    try:
-        return add_logo_watermark(image_bytes, full_path.read_bytes())
-    except Exception:
-        logger.exception("Failed to apply logo watermark, returning original image")
-        return image_bytes
