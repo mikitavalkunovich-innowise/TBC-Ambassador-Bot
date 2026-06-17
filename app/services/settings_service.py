@@ -43,14 +43,18 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "frame_path_uz": "frame_uz.png",
     # Image generation prompt template
     "generation_prompt": (
-        "Create a natural, realistic photo that looks like it was taken with an iPhone 16. "
-        "The photo shows two people standing together on a football field background, taking a photo together: "
-        "Person 1 is from the first reference photo provided, "
+        "Create a natural, realistic photo of two people standing together and posing for a photo, "
+        "as if a third person took the picture. "
+        "The background is a soccer (association football) field — green grass pitch, goal posts visible. "
+        "Person 1 is from the first reference photo provided. "
         "Person 2 is from the second reference photo provided. "
+        "CRITICAL: This is NOT a selfie — no hands, arms, or phone should be visible in the frame. "
+        "The photo should look like it was taken by someone else standing in front of them. "
         "CRITICAL: Preserve EXACTLY the facial features, skin tone, hair color, body type, and clothing "
         "of BOTH people exactly as shown in the reference photos. Do NOT alter, idealize, or change "
-        "any physical characteristics. The lighting should be natural outdoor lighting. "
-        "The photo quality should be natural and candid (not studio-like). "
+        "any physical characteristics of either person. "
+        "The lighting should be natural outdoor lighting. "
+        "The photo quality should be natural and candid, similar to an iPhone 16 snapshot. "
         "{extra}"
     ),
     # --- Russian messages ---
