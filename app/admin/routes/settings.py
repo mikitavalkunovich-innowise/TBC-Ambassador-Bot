@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 # Human-readable labels for the Messages tab (optional overrides)
 MESSAGE_LABELS: dict[str, str] = {
     "msg_privacy": "Legal Disclaimer (text)",
-    "btn_disclaimer_link": "Disclaimer — Read Policy button label",
     "btn_disclaimer_start": "Disclaimer — Start button label",
 }
 
@@ -31,7 +30,6 @@ MESSAGE_KEYS = [
     # --- Ordered by position in user flow ---
     "msg_welcome",
     "msg_privacy",
-    "btn_disclaimer_link",
     "btn_disclaimer_start",
     "msg_subscribe",
     "msg_not_subscribed",
