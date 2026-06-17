@@ -8,6 +8,7 @@ purges local disk copies once a Telegram backup is confirmed.
 import asyncio
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
@@ -64,16 +65,26 @@ async def download_telegram_file_bytes(bot: Bot, file_id: str) -> bytes | None:
 
 
 async def _unlink_if_exists(relative_path: str | None) -> int:
-    """Delete a file from the uploads directory. Returns bytes freed (0 if not found)."""
+    """
+    Delete a file from the uploads directory. Returns bytes freed (0 if not found).
+    All filesystem calls are run in a thread pool to avoid blocking the event loop.
+    """
     if not relative_path:
         return 0
+
     path = get_absolute_path(relative_path)
-    if not path.is_file():
-        return 0
-    size = await asyncio.to_thread(path.stat)
-    size_bytes = size.st_size
-    await asyncio.to_thread(path.unlink, missing_ok=True)
-    return size_bytes
+
+    def _stat_and_unlink(p: Path) -> int:
+        if not p.is_file():
+            return 0
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        p.unlink(missing_ok=True)
+        return size
+
+    return await asyncio.to_thread(_stat_and_unlink, path)
 
 
 async def purge_local_image_files(record: "GeneratedImage") -> int:
@@ -83,14 +94,27 @@ async def purge_local_image_files(record: "GeneratedImage") -> int:
     Sets local_files_purged_at and clears image_path / user_photo_path on the
     record object (caller must flush/commit the session).
 
+    Each file is deleted independently — an error on one does not prevent
+    the other from being removed.
+
     Returns total bytes freed.
     """
     freed = 0
-    freed += await _unlink_if_exists(record.image_path)
-    freed += await _unlink_if_exists(record.user_photo_path)
 
-    record.image_path = None
-    record.user_photo_path = None
+    if record.image_path:
+        try:
+            freed += await _unlink_if_exists(record.image_path)
+        except Exception:
+            logger.warning("Failed to delete image file: %s", record.image_path)
+        record.image_path = None
+
+    if record.user_photo_path:
+        try:
+            freed += await _unlink_if_exists(record.user_photo_path)
+        except Exception:
+            logger.warning("Failed to delete user photo file: %s", record.user_photo_path)
+        record.user_photo_path = None
+
     record.local_files_purged_at = datetime.now(timezone.utc)
 
     logger.debug(
