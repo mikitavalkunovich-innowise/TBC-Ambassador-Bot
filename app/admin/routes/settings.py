@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.storage import generate_filename, get_absolute_path, save_upload
 from app.services import settings_service
+from app.services.user_service import reset_user_flow
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/admin/templates")
@@ -125,6 +126,33 @@ async def reset_budget(
 ) -> RedirectResponse:
     await settings_service.set(session, "budget_spent_usd", "0.000000")
     return RedirectResponse("/admin/settings?tab=limits&saved=1", status_code=303)
+
+
+@router.post("/reset-user-flow", response_class=RedirectResponse, response_model=None)
+async def reset_user_flow_route(
+    telegram_user_id: str = Form(""),
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    raw = telegram_user_id.strip()
+    if not raw.isdigit():
+        return RedirectResponse("/admin/settings?tab=debug&error=invalid_user_id", status_code=303)
+
+    telegram_id = int(raw)
+    result = await reset_user_flow(session, telegram_id)
+    if result is None:
+        return RedirectResponse(
+            f"/admin/settings?tab=debug&error=user_not_found&user_id={telegram_id}",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        "/admin/settings?tab=debug"
+        f"&reset=ok&user_id={result.telegram_id}"
+        f"&images={result.images_deleted}"
+        f"&events={result.events_deleted}",
+        status_code=303,
+    )
 
 
 @router.post("/messages", response_class=RedirectResponse, response_model=None)

@@ -5,7 +5,7 @@
 
 <!-- Tab navigation -->
 <ul class="nav nav-tabs mb-4" id="settingsTabs">
-  {% for tab_id, tab_label in [('bot','Bot & Channel'), ('media','Media'), ('messages','Messages'), ('limits','Limits')] %}
+  {% for tab_id, tab_label in [('bot','Bot & Channel'), ('media','Media'), ('messages','Messages'), ('limits','Limits'), ('debug','Debug')] %}
   <li class="nav-item">
     <a class="nav-link {% if active_tab == tab_id %}active{% endif %}"
        href="/admin/settings?tab={{ tab_id }}">{{ tab_label }}</a>
@@ -333,6 +333,59 @@
               onsubmit="return confirm('Reset budget counter to $0?')">
           <button type="submit" class="btn btn-outline-danger btn-sm">
             <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Budget Counter
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DEBUG TAB -->
+{% elif active_tab == 'debug' %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header fw-semibold">Reset User Flow</div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Clears a user's bot progress so they can go through the flow again from <code>/start</code>.
+          Use for testing with real Telegram accounts.
+        </p>
+        <ul class="small text-muted mb-3">
+          <li>Resets language, disclaimer, subscription, generation attempts, and FSM state</li>
+          <li>Deletes generated images, uploaded selfies, and analytics events for this user</li>
+          <li><strong>Does not</strong> change the global budget spent counter — generation costs still count toward limits</li>
+        </ul>
+
+        {% if request.query_params.get('reset') == 'ok' %}
+        <div class="alert alert-success py-2">
+          User <code>{{ request.query_params.get('user_id') }}</code> was reset.
+          Removed {{ request.query_params.get('images', '0') }} image(s)
+          and {{ request.query_params.get('events', '0') }} event(s).
+          Budget counter unchanged.
+        </div>
+        {% elif request.query_params.get('error') == 'user_not_found' %}
+        <div class="alert alert-warning py-2">
+          No user found with Telegram ID <code>{{ request.query_params.get('user_id', '') }}</code>.
+          The user must send <code>/start</code> to the bot at least once.
+        </div>
+        {% elif request.query_params.get('error') == 'invalid_user_id' %}
+        <div class="alert alert-danger py-2">Enter a numeric Telegram user ID.</div>
+        {% endif %}
+
+        <form method="post" action="/admin/settings/reset-user-flow"
+              onsubmit="return confirm('Reset this user\'s flow? They will start from language selection on next /start.')">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Telegram User ID</label>
+            <input type="text" name="telegram_user_id" class="form-control font-monospace"
+                   placeholder="123456789" inputmode="numeric" pattern="[0-9]+" required>
+            <div class="form-text">
+              Same numeric ID as in Admin Telegram User ID above.
+              Send <code>/myid</code> in the bot to find it.
+            </div>
+          </div>
+          <button type="submit" class="btn btn-outline-danger">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset User Flow
           </button>
         </form>
       </div>

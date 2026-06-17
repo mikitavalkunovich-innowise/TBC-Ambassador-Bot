@@ -87,6 +87,14 @@ async def reinit_bot_session(token: str) -> Bot:
     return _bot
 
 
+def _user_fsm_key(user_telegram_id: int, bot_id: int) -> StorageKey:
+    return StorageKey(
+        bot_id=bot_id,
+        chat_id=user_telegram_id,
+        user_id=user_telegram_id,
+    )
+
+
 async def set_user_fsm_state(user_telegram_id: int, state: State | None) -> None:
     """
     Set the FSM state for a user by their Telegram ID.
@@ -97,14 +105,23 @@ async def set_user_fsm_state(user_telegram_id: int, state: State | None) -> None
         return
     try:
         me = await _bot.get_me()
-        key = StorageKey(
-            bot_id=me.id,
-            chat_id=user_telegram_id,
-            user_id=user_telegram_id,
-        )
+        key = _user_fsm_key(user_telegram_id, me.id)
         await _dp.fsm.storage.set_state(key=key, state=state)
     except Exception:
         logger.warning("Could not set FSM state for user %d", user_telegram_id)
+
+
+async def clear_user_fsm(user_telegram_id: int) -> None:
+    """Clear in-memory FSM state and data for a user (e.g. after admin flow reset)."""
+    if _bot is None or _dp is None:
+        return
+    try:
+        me = await _bot.get_me()
+        key = _user_fsm_key(user_telegram_id, me.id)
+        await _dp.fsm.storage.set_state(key=key, state=None)
+        await _dp.fsm.storage.set_data(key=key, data={})
+    except Exception:
+        logger.warning("Could not clear FSM for user %d", user_telegram_id)
 
 
 async def shutdown() -> None:
