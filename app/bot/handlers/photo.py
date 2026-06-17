@@ -25,7 +25,7 @@ from aiogram.types import CallbackQuery, Message, PhotoSize
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards.builders import generate_keyboard, regenerate_keyboard, skip_keyboard
+from app.bot.keyboards.builders import regenerate_keyboard, skip_keyboard
 from app.bot.states import UserFlow
 from app.core.storage import (
     generate_filename,

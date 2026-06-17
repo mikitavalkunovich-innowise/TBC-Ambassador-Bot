@@ -140,6 +140,15 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
                     caption=approved_text,
                 )
 
+        # Optionally send the bonus Eldor video after the approved image
+        video_enabled = await settings_service.get(session, "video_enabled") == "1"
+        if video_enabled:
+            try:
+                from app.bot.handlers.media import send_video_after_result
+                await send_video_after_result(bot, user.telegram_id, user, session)
+            except Exception:
+                logger.exception("Failed to send bonus video to user %d", user.telegram_id)
+
         # Offer regeneration if attempts remain
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
