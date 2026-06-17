@@ -38,11 +38,16 @@ from app.models.user import FlowStatus, User
 from app.services import settings_service
 from app.services.ai_service import generate_composite_photo
 from app.services.analytics_service import track_event
-from app.services.image_service import composite_into_frame_if_available, compress_to_webp
+from app.services.image_service import (
+    composite_into_frame_if_available,
+    compress_to_webp,
+    compress_user_photo,
+)
 from app.services.notify_service import notify_budget_exceeded, notify_new_image
 from app.services.telegram_file_service import (
     download_telegram_file_bytes,
     purge_local_image_files,
+    purge_user_photo_only,
     verify_telegram_file,
 )
 
@@ -169,8 +174,9 @@ async def _run_generation(
 
     await track_event(session, user.id, EventType.GENERATION_REQUESTED)
 
-    # Compress user photo to WebP before saving to disk
-    user_photo_webp = compress_to_webp(user_photo_bytes)
+    # Compress user selfie for temporary disk storage.
+    # Original bytes are kept in-memory for AI — the stored copy is only a regen fallback.
+    user_photo_webp = compress_user_photo(user_photo_bytes)
     user_photo_filename = generate_filename("user_photo.webp")
     user_photo_rel = await save_upload(user_photo_webp, "user_photos", user_photo_filename)
 
@@ -185,6 +191,13 @@ async def _run_generation(
     )
     session.add(image_record)
     await session.flush()
+
+    # The AI generation uses user_photo_bytes from memory, not from disk.
+    # If we already have a Telegram backup of the selfie (file_id from the upload),
+    # the on-disk copy is redundant — remove it now to free space immediately.
+    if image_record.telegram_user_photo_file_id:
+        await purge_user_photo_only(image_record)
+        await session.flush()
 
     try:
         prompt_template = await settings_service.get(session, "generation_prompt") or ""

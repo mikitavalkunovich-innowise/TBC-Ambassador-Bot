@@ -22,21 +22,30 @@ _STATIC_FRAMES_DIR = Path(__file__).parent.parent / "static" / "frames"
 # WebP compression
 # ---------------------------------------------------------------------------
 
-WEBP_QUALITY = 85
-WEBP_METHOD = 6          # slowest encoding = best compression ratio
-WEBP_MAX_SIDE = 2048     # resize if longest side exceeds this
+WEBP_METHOD = 6  # slowest encoding = best compression ratio
+
+# Generated result sent to users — keep visual quality high
+WEBP_QUALITY_GENERATED = 85
+WEBP_MAX_SIDE_GENERATED = 2048
+
+# User selfies — temporary; only needed as regen fallback if Telegram download fails
+# Lower quality + smaller resolution save significant disk space for a temporary file
+WEBP_QUALITY_USER_PHOTO = 75
+WEBP_MAX_SIDE_USER_PHOTO = 1280
 
 
 def compress_to_webp(
     data: bytes,
-    quality: int = WEBP_QUALITY,
-    max_side: int = WEBP_MAX_SIDE,
+    quality: int = WEBP_QUALITY_GENERATED,
+    max_side: int = WEBP_MAX_SIDE_GENERATED,
 ) -> bytes:
     """
     Convert any image bytes to WebP lossy.
 
     Achieves 25–34% smaller files vs JPEG at the same visual quality.
     Resizes proportionally if the longest side exceeds max_side.
+
+    Use compress_user_photo() for temporary user selfies stored before generation.
     """
     with Image.open(io.BytesIO(data)) as img:
         img = img.convert("RGB")
@@ -45,6 +54,21 @@ def compress_to_webp(
         buf = io.BytesIO()
         img.save(buf, format="WEBP", quality=quality, method=WEBP_METHOD)
         return buf.getvalue()
+
+
+def compress_user_photo(data: bytes) -> bytes:
+    """
+    Compress a user selfie for temporary on-disk storage.
+
+    The AI generation always uses the original in-memory bytes, so this file
+    is only a fallback in case Telegram download fails during regen.
+    Smaller quality and resolution are fine for this purpose.
+    """
+    return compress_to_webp(
+        data,
+        quality=WEBP_QUALITY_USER_PHOTO,
+        max_side=WEBP_MAX_SIDE_USER_PHOTO,
+    )
 
 # Watermark fallback configuration
 LOGO_PADDING = 16

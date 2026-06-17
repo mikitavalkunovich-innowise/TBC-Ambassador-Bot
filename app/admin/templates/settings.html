@@ -399,6 +399,10 @@
     <div class="card">
       <div class="card-header fw-semibold">Storage Usage</div>
       <div class="card-body">
+        <p class="text-muted small mb-3">
+          Shows disk usage of the <code>uploads/</code> directory only (generated images, selfies, ambassador photos, etc.).
+          Total server disk usage (OS, Python runtime, packages, etc.) is naturally higher and is visible in your hosting dashboard.
+        </p>
 
         {% if request.query_params.get('cleanup') == 'ok' %}
         <div class="alert alert-success py-2">
