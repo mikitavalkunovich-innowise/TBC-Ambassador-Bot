@@ -30,18 +30,6 @@ def capture_photo_file_id(msg: Message) -> str | None:
     return None
 
 
-async def verify_telegram_file(bot: Bot, file_id: str) -> bool:
-    """
-    Call getFile to confirm the file is still accessible on Telegram servers.
-    Returns True if file_path is returned successfully.
-    """
-    try:
-        tg_file = await bot.get_file(file_id)
-        return bool(tg_file.file_path)
-    except Exception:
-        logger.warning("Could not verify Telegram file_id=%s", file_id)
-        return False
-
 
 async def download_telegram_file_bytes(bot: Bot, file_id: str) -> bytes | None:
     """
