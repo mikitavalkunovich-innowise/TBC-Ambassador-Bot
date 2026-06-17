@@ -104,7 +104,7 @@ async def handle_approve(
     # Load user
     user = await session.get(User, image.user_id)
     if user is None:
-        await callback.answer("User not found.", show_alert=True)
+        logger.error("User not found for image_id=%s (user_id=%s)", image_id, image.user_id)
         return
 
     # Check remaining attempts
@@ -161,6 +161,7 @@ async def handle_approve(
             admin_base_url=config.webhook_base_url,
         )
 
+
 @router.callback_query(F.data.startswith(f"{REJECT_CB}:"))
 async def handle_reject(
     callback: CallbackQuery,
@@ -192,7 +193,7 @@ async def handle_reject(
 
     user = await session.get(User, image.user_id)
     if user is None:
-        await callback.answer("User not found.", show_alert=True)
+        logger.error("User not found for image_id=%s (user_id=%s)", image_id, image.user_id)
         return
 
     await track_event(session, user.id, EventType.IMAGE_REJECTED)
