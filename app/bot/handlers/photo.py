@@ -409,8 +409,8 @@ async def handle_regenerate_button(
 
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    # Clear any stale regen data
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None, regen_user_photo_file_id=None)
+    # Clear any stale regen data from a previous flow
+    await state.update_data(regen_photo_file_id=None, regen_user_photo_file_id=None)
 
     text = await settings_service.get_text(session, "msg_regen_ask_photo", lang)
     await callback.message.answer(text, reply_markup=skip_keyboard(lang))
@@ -437,13 +437,12 @@ async def handle_regen_photo(
         return
 
     photo: PhotoSize = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    photo_bytes = await bot.download_file(file.file_path)
-    photo_data = photo_bytes.read() if hasattr(photo_bytes, "read") else bytes(photo_bytes)
 
+    # Store only the file_id — bytes are downloaded right before generation.
+    # Storing raw bytes as list[int] in MemoryStorage wastes ~10–15 MB per user
+    # and can trigger OOM restarts that silently wipe the FSM state.
     await state.update_data(
-        regen_photo_bytes=list(photo_data),
-        regen_extra_prompt=None,
+        regen_photo_file_id=photo.file_id,
         regen_user_photo_file_id=photo.file_id,
     )
 
@@ -510,9 +509,9 @@ async def handle_regen_text(
         return
 
     data = await state.get_data()
-    raw_photo = data.get("regen_photo_bytes")
+    regen_photo_file_id = data.get("regen_photo_file_id")
     regen_user_photo_file_id = data.get("regen_user_photo_file_id")
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None, regen_user_photo_file_id=None)
+    await state.update_data(regen_photo_file_id=None, regen_user_photo_file_id=None)
 
     await _run_regen(
         message=message,
@@ -520,7 +519,7 @@ async def handle_regen_text(
         user=user,
         session=session,
         state=state,
-        raw_photo=raw_photo,
+        regen_photo_file_id=regen_photo_file_id,
         extra_prompt=message.text or "",
         regen_user_photo_file_id=regen_user_photo_file_id,
     )
@@ -546,14 +545,14 @@ async def handle_regen_text_skip(
         return
 
     data = await state.get_data()
-    raw_photo = data.get("regen_photo_bytes")
+    regen_photo_file_id = data.get("regen_photo_file_id")
     regen_user_photo_file_id = data.get("regen_user_photo_file_id")
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None, regen_user_photo_file_id=None)
+    await state.update_data(regen_photo_file_id=None, regen_user_photo_file_id=None)
     await callback.message.edit_reply_markup(reply_markup=None)
 
     lang = user.language.value if user.language else "ru"
 
-    if raw_photo is None:
+    if regen_photo_file_id is None:
         # Both steps skipped — nothing to regenerate
         nothing_text = await settings_service.get_text(
             session, "msg_regen_nothing_changed", lang
@@ -573,7 +572,7 @@ async def handle_regen_text_skip(
         user=user,
         session=session,
         state=state,
-        raw_photo=raw_photo,
+        regen_photo_file_id=regen_photo_file_id,
         extra_prompt="",
         regen_user_photo_file_id=regen_user_photo_file_id,
     )
@@ -589,26 +588,40 @@ async def _run_regen(
     user: User,
     session: AsyncSession,
     state: FSMContext,
-    raw_photo: list[int] | None,
+    regen_photo_file_id: str | None,
     extra_prompt: str,
     regen_user_photo_file_id: str | None = None,
 ) -> None:
     """
-    Resolve the stored photo (or fall back to the ambassador photo alone)
-    then call _run_generation.
+    Resolve the selfie to use for regeneration then call _run_generation.
 
-    raw_photo is stored as list[int] in FSM memory (JSON-serialisable).
-    If raw_photo is None, tries to reuse the previous selfie:
-      1. Read from local disk (user_photo_path)
-      2. Download from Telegram via telegram_user_photo_file_id
-      3. Ask user to send a new photo
+    Priority:
+      1. regen_photo_file_id — user uploaded a NEW selfie in step 1; download it.
+      2. DB fallback — user skipped step 1; reuse their last submitted selfie.
+         a. Local disk copy (user_photo_path)
+         b. Telegram download via telegram_user_photo_file_id
+      3. Ask user to send a new photo (all sources exhausted).
+
+    Photo bytes are never stored in FSM — only the Telegram file_id is kept.
+    Storing raw bytes as list[int] in MemoryStorage used 10–15 MB per user
+    and could trigger OOM restarts that silently cleared the FSM state.
     """
+    lang = user.language.value if user.language else "ru"
     resolved_file_id: str | None = regen_user_photo_file_id
 
-    if raw_photo is not None:
-        photo_bytes = bytes(raw_photo)
-    else:
-        # No new photo provided — reuse the user's last submitted photo from DB
+    if regen_photo_file_id is not None:
+        # User uploaded a new selfie — download it fresh from Telegram
+        logger.info("Downloading regen selfie from Telegram (file_id=%s)", regen_photo_file_id)
+        photo_bytes = await download_telegram_file_bytes(bot, regen_photo_file_id)
+        if photo_bytes is None:
+            # Download failed — fall back to the previous selfie
+            logger.warning("Could not download regen selfie; falling back to previous")
+            regen_photo_file_id = None  # trigger the fallback branch below
+        else:
+            resolved_file_id = regen_photo_file_id
+
+    if regen_photo_file_id is None:
+        # No new photo — reuse the user's last submitted selfie from the DB
         from sqlalchemy import desc
         from app.models.generation import GeneratedImage as GI
         latest = await session.execute(
@@ -618,11 +631,10 @@ async def _run_regen(
             .limit(1)
         )
         last_image = latest.scalar_one_or_none()
-        lang = user.language.value if user.language else "ru"
 
         photo_bytes = None
 
-        # 1. Try local disk copy
+        # 2a. Try local disk copy
         if last_image and last_image.user_photo_path:
             photo_path = get_absolute_path(last_image.user_photo_path)
             if photo_path.exists():
@@ -630,7 +642,7 @@ async def _run_regen(
                 if not resolved_file_id:
                     resolved_file_id = last_image.telegram_user_photo_file_id
 
-        # 2. Try downloading from Telegram
+        # 2b. Try downloading from Telegram
         if photo_bytes is None and last_image and last_image.telegram_user_photo_file_id:
             logger.info(
                 "Local selfie purged; downloading from Telegram for regen (image_id=%s)",
@@ -642,7 +654,7 @@ async def _run_regen(
             if not resolved_file_id:
                 resolved_file_id = last_image.telegram_user_photo_file_id
 
-        # 3. Fail — ask user for new photo
+        # 3. Exhausted — ask user to send a new photo
         if photo_bytes is None:
             await message.answer(
                 await settings_service.get_text(session, "msg_send_photo", lang)
