@@ -364,13 +364,17 @@ async def handle_invalid_photo(
 # Regeneration entry point
 # ---------------------------------------------------------------------------
 
-@router.callback_query(UserFlow.awaiting_regeneration_input, F.data == "action:regenerate")
+@router.callback_query(F.data == "action:regenerate")
 async def handle_regenerate_button(
     callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """User pressed «Generate new» — begin sequential regen flow (step 1: photo)."""
+    """User pressed «Generate new» — begin sequential regen flow (step 1: photo).
+
+    No FSM-state filter here: the 'Generate new' button may arrive after an app
+    restart that wiped MemoryStorage.  We guard via DB checks instead.
+    """
     tg_id = callback.from_user.id
     result = await session.execute(select(User).where(User.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -379,10 +383,34 @@ async def handle_regenerate_button(
         return
 
     lang = user.language.value if user.language else "ru"
+
+    # Guard: user must have reached DONE state (result was delivered) and have remaining attempts
+    if user.flow_status not in (FlowStatus.DONE,):
+        await callback.answer()
+        return
+
+    max_attempts_str = await settings_service.get(session, "max_regeneration_attempts") or "3"
+    max_attempts = int(max_attempts_str)
+    attempts_remaining = max_attempts - user.regenerations_used
+
+    if attempts_remaining <= 0:
+        no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
+        await callback.answer(no_attempts_text[:200], show_alert=True)
+        return
+
+    # If user is mid-flow already, reset to avoid duplicate flows
+    current_fsm = await state.get_state()
+    if current_fsm in (
+        UserFlow.awaiting_regen_photo.state,
+        UserFlow.awaiting_regen_text.state,
+    ):
+        # Already in regen flow — reset and restart cleanly
+        await state.clear()
+
     await callback.message.edit_reply_markup(reply_markup=None)
 
     # Clear any stale regen data
-    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None)
+    await state.update_data(regen_photo_bytes=None, regen_extra_prompt=None, regen_user_photo_file_id=None)
 
     text = await settings_service.get_text(session, "msg_regen_ask_photo", lang)
     await callback.message.answer(text, reply_markup=skip_keyboard(lang))
