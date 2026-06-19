@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Debug Playground — TBC Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0"><i class="bi bi-lightning me-2"></i>Prompt Playground</h4>
+  <small class="text-muted">Generations here are counted in the budget</small>
+</div>
+
+<div class="row g-4">
+  <!-- Left column: controls -->
+  <div class="col-lg-5">
+
+    <!-- Photo upload -->
+    <div class="card mb-3">
+      <div class="card-header fw-semibold"><i class="bi bi-person-square me-1"></i>Your photo</div>
+      <div class="card-body">
+        <div id="dropZone"
+             class="border border-2 border-dashed rounded text-center p-4 position-relative"
+             style="cursor:pointer; border-color:#dee2e6 !important; min-height:120px;"
+             onclick="document.getElementById('photoInput').click()">
+          <input type="file" id="photoInput" accept="image/*" class="d-none">
+          <div id="dropLabel">
+            <i class="bi bi-cloud-upload fs-3 text-secondary"></i>
+            <div class="text-secondary mt-1 small">Click or drag & drop a photo</div>
+          </div>
+          <img id="photoPreview" src="" alt="preview"
+               class="d-none rounded" style="max-height:180px; max-width:100%; object-fit:contain;">
+        </div>
+        <div id="photoStatus" class="small text-muted mt-2 d-none">
+          <i class="bi bi-check-circle-fill text-success me-1"></i>Photo ready
+          <a href="#" id="changePhoto" class="ms-2 text-secondary">Change</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prompt editor -->
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
+        <span><i class="bi bi-pencil-square me-1"></i>Prompt</span>
+        <button class="btn btn-sm btn-outline-secondary" id="loadPromptBtn" type="button">
+          <i class="bi bi-arrow-down-circle me-1"></i>Load from Settings
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <textarea id="promptTextarea" class="form-control border-0 rounded-0 rounded-bottom"
+                  rows="14" style="font-size:.85rem; font-family:monospace; resize:vertical;"
+                  placeholder="Enter generation prompt...">{{ current_prompt }}</textarea>
+      </div>
+    </div>
+
+    <button id="generateBtn" class="btn btn-primary w-100" disabled>
+      <span id="generateSpinner" class="spinner-border spinner-border-sm me-2 d-none" role="status"></span>
+      <i class="bi bi-stars me-1" id="generateIcon"></i>Generate
+    </button>
+
+    <div id="errorAlert" class="alert alert-danger mt-3 d-none small"></div>
+
+  </div>
+
+  <!-- Right column: result -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-image me-1"></i>Result</div>
+      <div class="card-body d-flex flex-column align-items-center justify-content-center"
+           id="resultArea" style="min-height:400px;">
+        <div id="resultPlaceholder" class="text-center text-muted">
+          <i class="bi bi-image fs-1 opacity-25"></i>
+          <div class="mt-2 small">Result will appear here</div>
+        </div>
+        <img id="resultImage" src="" alt="Generated"
+             class="d-none img-fluid rounded shadow-sm" style="max-height:600px;">
+        <div id="resultMeta" class="d-none mt-3 w-100">
+          <div class="row g-2 text-center">
+            <div class="col-6">
+              <div class="card bg-light">
+                <div class="card-body py-2">
+                  <div class="small text-muted">Cost</div>
+                  <div class="fw-bold" id="metaCost">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="card bg-light">
+                <div class="card-body py-2">
+                  <div class="small text-muted">Input tokens</div>
+                  <div class="fw-bold" id="metaTokens">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <a id="resultDownload" href="#" download="generated.webp"
+             class="btn btn-outline-secondary btn-sm mt-2 w-100">
+            <i class="bi bi-download me-1"></i>Download
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  let photoId = null;
+
+  // ── Photo upload ────────────────────────────────────────────────────────────
+
+  const dropZone    = document.getElementById('dropZone');
+  const photoInput  = document.getElementById('photoInput');
+  const photoPreview = document.getElementById('photoPreview');
+  const dropLabel   = document.getElementById('dropLabel');
+  const photoStatus = document.getElementById('photoStatus');
+  const changePhoto = document.getElementById('changePhoto');
+  const generateBtn = document.getElementById('generateBtn');
+
+  photoInput.addEventListener('change', () => {
+    if (photoInput.files[0]) uploadPhoto(photoInput.files[0]);
+  });
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-primary'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-primary'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('border-primary');
+    if (e.dataTransfer.files[0]) uploadPhoto(e.dataTransfer.files[0]);
+  });
+
+  changePhoto.addEventListener('click', e => {
+    e.preventDefault();
+    photoId = null;
+    generateBtn.disabled = true;
+    photoPreview.classList.add('d-none');
+    dropLabel.classList.remove('d-none');
+    photoStatus.classList.add('d-none');
+  });
+
+  async function uploadPhoto(file) {
+    dropLabel.innerHTML = '<div class="spinner-border spinner-border-sm text-secondary"></div><div class="small text-muted mt-1">Uploading…</div>';
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+      const resp = await fetch('/admin/debug/upload', { method: 'POST', body: form });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+
+      photoId = data.photo_id;
+      photoPreview.src = data.preview_url;
+      photoPreview.classList.remove('d-none');
+      dropLabel.classList.add('d-none');
+      photoStatus.classList.remove('d-none');
+      generateBtn.disabled = false;
+    } catch (err) {
+      dropLabel.innerHTML = '<i class="bi bi-exclamation-triangle text-danger fs-3"></i><div class="small text-danger mt-1">' + err.message + '</div>';
+    }
+  }
+
+  // ── Load prompt from settings ───────────────────────────────────────────────
+
+  document.getElementById('loadPromptBtn').addEventListener('click', async () => {
+    try {
+      const resp = await fetch('/admin/debug/current-prompt');
+      const data = await resp.json();
+      if (data.prompt !== undefined) {
+        document.getElementById('promptTextarea').value = data.prompt;
+      }
+    } catch (e) {
+      alert('Failed to load prompt from settings.');
+    }
+  });
+
+  // ── Generate ────────────────────────────────────────────────────────────────
+
+  const spinner     = document.getElementById('generateSpinner');
+  const genIcon     = document.getElementById('generateIcon');
+  const errorAlert  = document.getElementById('errorAlert');
+  const resultImage = document.getElementById('resultImage');
+  const resultPlaceholder = document.getElementById('resultPlaceholder');
+  const resultMeta  = document.getElementById('resultMeta');
+  const resultDownload = document.getElementById('resultDownload');
+
+  generateBtn.addEventListener('click', async () => {
+    if (!photoId) return;
+
+    const prompt = document.getElementById('promptTextarea').value.trim();
+    if (!prompt) { alert('Please enter a prompt.'); return; }
+
+    // Show spinner
+    generateBtn.disabled = true;
+    spinner.classList.remove('d-none');
+    genIcon.classList.add('d-none');
+    errorAlert.classList.add('d-none');
+    resultImage.classList.add('d-none');
+    resultMeta.classList.add('d-none');
+    resultPlaceholder.classList.remove('d-none');
+    resultPlaceholder.innerHTML = '<div class="spinner-border text-primary mb-2"></div><div class="small text-muted">Generating… this may take 30–60 s</div>';
+
+    try {
+      const resp = await fetch('/admin/debug/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo_id: photoId, prompt }),
+      });
+      const data = await resp.json();
+
+      if (data.error) throw new Error(data.error);
+
+      resultImage.src = data.image_url + '?t=' + Date.now();
+      resultImage.classList.remove('d-none');
+      resultPlaceholder.classList.add('d-none');
+
+      document.getElementById('metaCost').textContent = '$' + data.cost_usd.toFixed(4);
+      document.getElementById('metaTokens').textContent = data.input_tokens.toLocaleString();
+      resultDownload.href = data.image_url;
+      resultMeta.classList.remove('d-none');
+
+    } catch (err) {
+      resultPlaceholder.innerHTML = '<i class="bi bi-image fs-1 opacity-25"></i><div class="mt-2 small">Result will appear here</div>';
+      errorAlert.textContent = err.message;
+      errorAlert.classList.remove('d-none');
+    } finally {
+      generateBtn.disabled = false;
+      spinner.classList.add('d-none');
+      genIcon.classList.remove('d-none');
+    }
+  });
+})();
+</script>
+{% endblock %}
