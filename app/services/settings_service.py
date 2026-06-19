@@ -80,6 +80,14 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "btn_extra_photo_done_uz": "✅ Tayyor, yaratish",
     "btn_extra_photo_skip_ru": "⏭ Пропустить",
     "btn_extra_photo_skip_uz": "⏭ O'tkazib yuborish",
+    # Image generation system instruction (passed as system_instruction to the model)
+    "system_instruction": (
+        "You are a photorealistic image compositor. "
+        "Your absolute constraint: reproduce every person's face exactly as shown "
+        "in the reference photos — identical facial features, skin tone, ethnicity, "
+        "hair, and proportions. Never alter, idealize, westernize, or average any "
+        "person's appearance. The output must be indistinguishable from a real photograph."
+    ),
     # Image generation prompt template
     "generation_prompt": (
         "Create a natural, realistic photo of two people standing together and posing for a photo, "

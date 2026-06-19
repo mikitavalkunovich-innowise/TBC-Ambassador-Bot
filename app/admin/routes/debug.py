@@ -20,7 +20,7 @@ from app.admin.auth import get_current_admin
 from app.core.database import get_db_session
 from app.core.storage import get_absolute_path, get_upload_path, ensure_dirs
 from app.services import settings_service
-from app.services.ai_service import DEFAULT_SYSTEM_INSTRUCTION, generate_composite_photo
+from app.services.ai_service import generate_composite_photo
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/admin/templates")
@@ -38,9 +38,10 @@ async def get_current_prompt(
     session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> JSONResponse:
-    """Return the current generation_prompt from settings (for the «Load from Settings» button)."""
+    """Return current generation_prompt and system_instruction from DB (for «Load from Settings»)."""
     prompt = await settings_service.get(session, "generation_prompt") or ""
-    return JSONResponse({"prompt": prompt})
+    system_instruction = await settings_service.get(session, "system_instruction") or ""
+    return JSONResponse({"prompt": prompt, "system_instruction": system_instruction})
 
 
 @router.get("", response_class=HTMLResponse, response_model=None)
@@ -51,13 +52,14 @@ async def debug_page(
 ) -> HTMLResponse:
     """Render the debug playground page."""
     current_prompt = await settings_service.get(session, "generation_prompt") or ""
+    current_system_instruction = await settings_service.get(session, "system_instruction") or ""
     return templates.TemplateResponse(
         "debug.html",
         {
             "request": request,
             "active_page": "debug",
             "current_prompt": current_prompt,
-            "default_system_instruction": DEFAULT_SYSTEM_INSTRUCTION,
+            "current_system_instruction": current_system_instruction,
         },
     )
 

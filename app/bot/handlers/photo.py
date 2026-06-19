@@ -229,6 +229,7 @@ async def _run_generation(
 
     try:
         prompt_template = await settings_service.get(session, "generation_prompt") or ""
+        system_instruction = await settings_service.get(session, "system_instruction") or None
 
         result = await generate_composite_photo(
             user_photo_bytes_list=user_photo_bytes_list,
@@ -236,6 +237,7 @@ async def _run_generation(
             prompt_template=prompt_template,
             extra_prompt=extra_prompt,
             ambassador_face_crop_bytes=ambassador_face_crop_bytes,
+            system_instruction=system_instruction,
         )
 
         frame_path_rel = await settings_service.get(session, f"frame_path_{lang}")

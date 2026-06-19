@@ -249,6 +249,11 @@
   <div class="card-body">
     <form method="post" action="/admin/settings/messages">
       <div class="mb-4">
+        <label class="form-label fw-semibold">System Instruction (English)</label>
+        <textarea name="system_instruction" class="form-control font-monospace" rows="4">{{ s.get('system_instruction', '') }}</textarea>
+        <div class="form-text">High-priority model constraint passed as <code>system_instruction</code>. Changes here affect all real bot generations.</div>
+      </div>
+      <div class="mb-4">
         <label class="form-label fw-semibold">Image Generation Prompt (English)</label>
         <textarea name="generation_prompt" class="form-control font-monospace" rows="5">{{ s.get('generation_prompt', '') }}</textarea>
         <div class="form-text">Use <code>{extra}</code> as placeholder for user's additional instructions.</div>

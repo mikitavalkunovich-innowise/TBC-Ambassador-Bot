@@ -212,9 +212,10 @@ async def save_messages(
             field = f"{key}_{lang}"
             if field in form_data:
                 updates[field] = str(form_data[field])
-    # Also save generation prompt (single field, no language)
-    if "generation_prompt" in form_data:
-        updates["generation_prompt"] = str(form_data["generation_prompt"])
+    # Also save single-language fields (no _ru / _uz suffix)
+    for key in ("generation_prompt", "system_instruction"):
+        if key in form_data:
+            updates[key] = str(form_data[key])
     await settings_service.set_many(session, updates)
     return RedirectResponse("/admin/settings?tab=messages&saved=1", status_code=303)
 

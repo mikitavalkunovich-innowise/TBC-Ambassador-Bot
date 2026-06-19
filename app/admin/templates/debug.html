@@ -45,7 +45,7 @@
         <div class="card-body p-0">
           <textarea id="sysInstructTextarea" class="form-control border-0 rounded-0 rounded-bottom"
                     rows="6" style="font-size:.82rem; font-family:monospace; resize:vertical;"
-                    placeholder="System instruction for the model…">{{ default_system_instruction }}</textarea>
+                    placeholder="System instruction for the model…">{{ current_system_instruction }}</textarea>
         </div>
       </div>
     </div>
@@ -179,6 +179,9 @@
       const data = await resp.json();
       if (data.prompt !== undefined) {
         document.getElementById('promptTextarea').value = data.prompt;
+      }
+      if (data.system_instruction !== undefined) {
+        document.getElementById('sysInstructTextarea').value = data.system_instruction;
       }
     } catch (e) {
       alert('Failed to load prompt from settings.');
