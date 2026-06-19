@@ -119,8 +119,6 @@ async def generate_composite_photo(
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
-            thinking_config=types.ThinkingConfig(thinking_budget=4096),
-            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
         ),
     )
 
