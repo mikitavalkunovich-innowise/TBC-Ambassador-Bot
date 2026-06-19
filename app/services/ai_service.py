@@ -2,10 +2,12 @@
 AI image generation service using Gemini 3 Pro Image (Nano Banana Pro).
 Model: gemini-3-pro-image
 """
+import io
 import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
+from PIL import Image
 from google import genai
 from google.genai import types
 
@@ -37,6 +39,23 @@ class GenerationResult:
     cost_usd: Decimal
 
 
+def _face_crop(image_bytes: bytes) -> bytes:
+    """Crop the middle vertical zone of an image where the face typically appears.
+
+    Targets the 10%–65% vertical range, which captures the face and shoulders
+    for both close-up selfies and 3/4-body portrait shots.
+    Returns JPEG bytes at quality 92.
+    """
+    img = Image.open(io.BytesIO(image_bytes))
+    w, h = img.size
+    top = int(h * 0.10)
+    bottom = int(h * 0.65)
+    cropped = img.crop((0, top, w, bottom))
+    buf = io.BytesIO()
+    cropped.save(buf, format="JPEG", quality=92)
+    return buf.getvalue()
+
+
 def _calculate_cost(input_tokens: int) -> Decimal:
     """
     Calculate generation cost.
@@ -51,78 +70,116 @@ async def generate_composite_photo(
     ambassador_photo_bytes: bytes,
     prompt_template: str,
     extra_prompt: str = "",
+    ambassador_face_crop_bytes: bytes | None = None,
 ) -> GenerationResult:
     """
     Generate a composite photo of the user and the TBC ambassador.
 
+    Image layout sent to Gemini (with face crops):
+        [prompt text]
+        → AMBASSADOR face crop  (high-res facial detail)
+        → AMBASSADOR full photo (body, clothing, context)
+        → USER face crop        (high-res facial detail)
+        → USER full photo(s)    (body, clothing, context)
+        → AMBASSADOR full photo (second identity anchor)
+
     Args:
-        user_photo_bytes_list: One or more JPEG selfies of the user (main + optional extra angles).
-                               Multiple photos improve likeness accuracy, especially for
-                               Turkic / Central Asian facial features.
-        ambassador_photo_bytes: Raw bytes of the ambassador's reference photo (JPEG/PNG auto-detected).
+        user_photo_bytes_list: One or more selfies of the user (main + optional extra angles).
+        ambassador_photo_bytes: Raw bytes of the ambassador's reference photo (JPEG/PNG).
         prompt_template: Generation prompt template (may contain {extra} placeholder).
         extra_prompt: Optional additional instructions from the user.
+        ambassador_face_crop_bytes: Pre-cropped face region of the ambassador photo (optional).
+                                    If None, only the full photo is used for the ambassador.
 
     Returns:
         GenerationResult with image bytes and cost information.
     """
     settings = get_settings()
-    # Use the async client so the long-running Gemini call doesn't block the event loop
     client = genai.Client(api_key=settings.google_ai_api_key)
 
-    # Build image mapping header.
-    # Layout: ambassador (anchor) → user photos → ambassador (anchor again).
-    # Sending the ambassador photo twice uses both available character slots
-    # for Person 2, which significantly strengthens identity anchoring.
     n = len(user_photo_bytes_list)
-    ambassador_slot = 1
-    user_start = 2
-    user_end = user_start + n - 1
-    ambassador_repeat = user_end + 1
 
+    # -------------------------------------------------------------------------
+    # Build the image mapping header so the model knows exactly who is who.
+    # Image indices start from 1 and are laid out as:
+    #   amb_face_crop | amb_full | user_face_crop | user_full(s) | amb_full_anchor
+    # -------------------------------------------------------------------------
+    idx = 1
+    amb_face_idx: int | None = None
+    if ambassador_face_crop_bytes is not None:
+        amb_face_idx = idx
+        idx += 1
+    amb_full_idx = idx
+    idx += 1
+    user_face_idx = idx   # dynamically cropped from first user photo
+    idx += 1
+    user_start_idx = idx
+    user_end_idx = idx + n - 1
+    idx += n
+    amb_anchor_idx = idx
+
+    amb_face_label = (
+        f"Image {amb_face_idx} = AMBASSADOR face crop (close-up, high detail). "
+        if amb_face_idx is not None else ""
+    )
     if n > 1:
-        identity_header = (
-            f"IMAGE MAPPING: "
-            f"Image {ambassador_slot} = AMBASSADOR (Person 2, first anchor). "
-            f"Images {user_start}–{user_end} = USER (Person 1) — use all {n} photos together "
+        user_label = (
+            f"Images {user_face_idx} = USER face crop (close-up). "
+            f"Images {user_start_idx}–{user_end_idx} = USER full photos — use all {n} together "
             f"to reconstruct their exact face, bone structure, skin tone, and hair. "
-            f"Image {ambassador_repeat} = AMBASSADOR (Person 2, second anchor — same person, reinforces identity). "
-            f"NEVER swap Person 1 and Person 2."
         )
     else:
-        identity_header = (
-            "IMAGE MAPPING: "
-            f"Image {ambassador_slot} = AMBASSADOR (Person 2, first anchor). "
-            f"Image {user_start} = USER (Person 1). "
-            f"Image {ambassador_repeat} = AMBASSADOR (Person 2, second anchor — same person, reinforces identity). "
-            "NEVER swap Person 1 and Person 2."
+        user_label = (
+            f"Image {user_face_idx} = USER face crop (close-up). "
+            f"Image {user_start_idx} = USER full photo. "
         )
+
+    identity_header = (
+        "IMAGE MAPPING: "
+        + amb_face_label
+        + f"Image {amb_full_idx} = AMBASSADOR full photo (Person 2, first anchor). "
+        + user_label
+        + f"Image {amb_anchor_idx} = AMBASSADOR full photo (Person 2, second anchor — same person). "
+        "NEVER swap Person 1 and Person 2."
+    )
 
     # Use replace instead of .format() to avoid KeyError if the admin adds {other_vars}
     raw_prompt = prompt_template.replace("{extra}", extra_prompt or "").strip()
     prompt_text = identity_header + "\n\n" + raw_prompt
 
-    # Build parts: ambassador (anchor) → user photos → ambassador (anchor again)
-    ambassador_part = types.Part(
-        inline_data=types.Blob(
-            mime_type=_detect_mime(ambassador_photo_bytes),
-            data=ambassador_photo_bytes,
+    # -------------------------------------------------------------------------
+    # Assemble parts in the declared order
+    # -------------------------------------------------------------------------
+    def _make_part(data: bytes) -> types.Part:
+        return types.Part(
+            inline_data=types.Blob(mime_type=_detect_mime(data), data=data)
         )
-    )
+
+    ambassador_full_part = _make_part(ambassador_photo_bytes)
+
     parts: list[types.Part] = [types.Part(text=prompt_text)]
-    parts.append(ambassador_part)
+
+    if ambassador_face_crop_bytes is not None:
+        parts.append(_make_part(ambassador_face_crop_bytes))
+
+    parts.append(ambassador_full_part)
+
+    # User face crop (heuristic crop of the main selfie)
+    user_face_crop = _face_crop(user_photo_bytes_list[0])
+    parts.append(_make_part(user_face_crop))
+
+    # All user photos (full)
     for photo_bytes in user_photo_bytes_list:
-        parts.append(
-            types.Part(
-                inline_data=types.Blob(
-                    mime_type=_detect_mime(photo_bytes),
-                    data=photo_bytes,
-                )
-            )
-        )
-    parts.append(ambassador_part)
+        parts.append(_make_part(photo_bytes))
+
+    # Ambassador second anchor
+    parts.append(ambassador_full_part)
 
     contents = [types.Content(role="user", parts=parts)]
+
+    # Total image count for cost estimation fallback
+    extra_images = (1 if ambassador_face_crop_bytes is not None else 0) + 1  # amb crop + user crop
+    total_images = n + 2 + extra_images  # user photos + amb×2 + face crops
 
     logger.info("Sending image generation request to gemini-3-pro-image")
 
@@ -158,7 +215,6 @@ async def generate_composite_photo(
 
     # Extract token usage for cost tracking
     usage = response.usage_metadata
-    total_images = len(user_photo_bytes_list) + 2  # user photos + ambassador sent twice
     input_tokens = (
         (usage.prompt_token_count if usage else None)
         or (total_images * TOKENS_PER_INPUT_IMAGE + 300)

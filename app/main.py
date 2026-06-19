@@ -28,23 +28,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bundled ambassador photo — committed to the repo so it is always present
-_BUNDLED_AMBASSADOR_SRC = Path(__file__).parent / "resources" / "ambassador_canonical.jpeg"
-_BUNDLED_AMBASSADOR_DST = "ambassador/ambassador_canonical.jpeg"
+# Bundled ambassador photos — committed to the repo so they are always present.
+# Both files are copied to the uploads volume on startup if not already there.
+_RESOURCES_DIR = Path(__file__).parent / "resources"
+_BUNDLED_FILES: list[tuple[str, str]] = [
+    ("ambassador_canonical.jpeg", "ambassador/ambassador_canonical.jpeg"),
+    ("ambassador_face_crop.jpeg", "ambassador/ambassador_face_crop.jpeg"),
+]
 
 
 def _ensure_bundled_ambassador_photo(uploads_path: Path) -> None:
-    """Copy the canonical ambassador photo from the app package to the uploads volume."""
-    dst = uploads_path / _BUNDLED_AMBASSADOR_DST
-    if dst.exists():
-        return
-    if not _BUNDLED_AMBASSADOR_SRC.exists():
-        logger.warning("Bundled ambassador photo not found at %s", _BUNDLED_AMBASSADOR_SRC)
-        return
+    """Copy the canonical ambassador photos from the app package to the uploads volume."""
     import shutil
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_BUNDLED_AMBASSADOR_SRC, dst)
-    logger.info("Copied bundled ambassador photo to %s", dst)
+    for src_name, dst_rel in _BUNDLED_FILES:
+        src = _RESOURCES_DIR / src_name
+        dst = uploads_path / dst_rel
+        if dst.exists():
+            continue
+        if not src.exists():
+            logger.warning("Bundled file not found at %s", src)
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        logger.info("Copied bundled file to %s", dst)
 
 
 @asynccontextmanager

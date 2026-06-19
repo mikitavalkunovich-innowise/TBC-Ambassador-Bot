@@ -189,6 +189,16 @@ async def _run_generation(
 
     ambassador_bytes = ambassador_path.read_bytes()
 
+    # Load the pre-cropped face region of the ambassador photo (best-effort).
+    # The face crop gives Gemini a high-resolution close-up for better identity anchoring.
+    # Convention: face crop lives in the same directory, named "ambassador_face_crop.<ext>".
+    face_crop_path = ambassador_path.parent / ("ambassador_face_crop" + ambassador_path.suffix)
+    ambassador_face_crop_bytes: bytes | None = None
+    if face_crop_path.exists():
+        ambassador_face_crop_bytes = face_crop_path.read_bytes()
+    else:
+        logger.warning("Ambassador face crop not found at %s; proceeding without it", face_crop_path)
+
     generating_text = await settings_service.get_text(session, "msg_generating", lang)
     generating_msg = await message.answer(generating_text)
 
@@ -225,6 +235,7 @@ async def _run_generation(
             ambassador_photo_bytes=ambassador_bytes,
             prompt_template=prompt_template,
             extra_prompt=extra_prompt,
+            ambassador_face_crop_bytes=ambassador_face_crop_bytes,
         )
 
         frame_path_rel = await settings_service.get(session, f"frame_path_{lang}")
