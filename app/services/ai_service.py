@@ -48,8 +48,8 @@ def _face_crop(image_bytes: bytes) -> bytes:
     """
     img = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
-    top = int(h * 0.10)
-    bottom = int(h * 0.65)
+    top = 0
+    bottom = int(h * 0.55)
     cropped = img.crop((0, top, w, bottom))
     buf = io.BytesIO()
     cropped.save(buf, format="JPEG", quality=92)
