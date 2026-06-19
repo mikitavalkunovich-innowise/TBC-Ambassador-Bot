@@ -117,13 +117,14 @@ async def _check_and_enforce_budget(
         lang = user.language.value if user.language else "ru"
         exceeded_msg = await settings_service.get_text(session, "budget_exceeded_message", lang)
 
-        # Build channel link for "Go to channel" button
+        # Build channel link for "Go to channel" button.
+        # Private channels (-100...) have no public t.me URL, so skip the button.
         channel_id = await settings_service.get(session, "telegram_channel_id") or ""
-        if channel_id.startswith("-100"):
-            ch_link = "https://t.me"
-        else:
+        if channel_id and not channel_id.startswith("-"):
             ch_link = f"https://t.me/{channel_id.lstrip('@')}"
-        markup = channel_keyboard(lang, ch_link) if channel_id else None
+            markup = channel_keyboard(lang, ch_link)
+        else:
+            markup = None
 
         await bot.send_message(chat_id=user.telegram_id, text=exceeded_msg, reply_markup=markup)
 
@@ -287,7 +288,10 @@ async def _run_generation(
             except Exception:
                 logger.exception("Failed to send admin notification")
 
-        await generating_msg.delete()
+        try:
+            await generating_msg.delete()
+        except Exception:
+            pass
         pending_text = await settings_service.get_text(session, "msg_pending_review", lang)
         await message.answer(pending_text)
 

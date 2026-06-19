@@ -66,12 +66,15 @@ async def _send_result_to_user(
             from aiogram.types import FSInputFile
             img_path = get_absolute_path(image.image_path)
             if img_path.exists():
-                await bot.send_photo(
-                    chat_id=user.telegram_id,
-                    photo=FSInputFile(str(img_path)),
-                    caption=approved_text,
-                )
-                sent = True
+                try:
+                    await bot.send_photo(
+                        chat_id=user.telegram_id,
+                        photo=FSInputFile(str(img_path)),
+                        caption=approved_text,
+                    )
+                    sent = True
+                except Exception:
+                    logger.warning("Failed to send via local file for image %s", image.id)
         if not sent:
             await bot.send_message(chat_id=user.telegram_id, text=approved_text)
     else:

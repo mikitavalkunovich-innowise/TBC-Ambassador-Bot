@@ -37,11 +37,6 @@ class GenerationResult:
     cost_usd: Decimal
 
 
-def _get_client() -> genai.Client:
-    settings = get_settings()
-    return genai.Client(api_key=settings.google_ai_api_key)
-
-
 def _calculate_cost(input_tokens: int) -> Decimal:
     """
     Calculate generation cost.
@@ -72,6 +67,7 @@ async def generate_composite_photo(
         GenerationResult with image bytes and cost information.
     """
     settings = get_settings()
+    # Use the async client so the long-running Gemini call doesn't block the event loop
     client = genai.Client(api_key=settings.google_ai_api_key)
 
     # Always prepend an identity header so the model knows which image is which person.
@@ -90,7 +86,8 @@ async def generate_composite_photo(
             "Image 2 (the LAST image) = AMBASSADOR (Person 2). "
             "NEVER swap these two identities."
         )
-    raw_prompt = prompt_template.format(extra=extra_prompt or "").strip()
+    # Use replace instead of .format() to avoid KeyError if the admin adds {other_vars}
+    raw_prompt = prompt_template.replace("{extra}", extra_prompt or "").strip()
     prompt_text = identity_header + "\n\n" + raw_prompt
 
     # Build parts: text prompt → all user photos → ambassador photo (always last)
@@ -117,20 +114,21 @@ async def generate_composite_photo(
 
     logger.info("Sending image generation request to gemini-3-pro-image")
 
-    response = client.models.generate_content(
+    response = await client.aio.models.generate_content(
         model="gemini-3-pro-image",
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
-            thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
+            thinking_config=types.ThinkingConfig(thinking_budget=4096),
             media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
-            image_config=types.ImageConfig(image_size="2K"),
         ),
     )
 
     # Extract image bytes from response
     image_bytes: bytes | None = None
-    for candidate in response.candidates:
+    for candidate in (response.candidates or []):
+        if not candidate.content or not candidate.content.parts:
+            continue
         for part in candidate.content.parts:
             if part.inline_data and part.inline_data.data:
                 image_bytes = part.inline_data.data
@@ -144,8 +142,13 @@ async def generate_composite_photo(
     # Extract token usage for cost tracking
     usage = response.usage_metadata
     total_images = len(user_photo_bytes_list) + 1  # user photos + ambassador
-    input_tokens = usage.prompt_token_count if usage else (total_images * TOKENS_PER_INPUT_IMAGE + 300)
-    output_tokens = usage.candidates_token_count if usage else 1120
+    input_tokens = (
+        (usage.prompt_token_count if usage else None)
+        or (total_images * TOKENS_PER_INPUT_IMAGE + 300)
+    )
+    output_tokens = (
+        (usage.candidates_token_count if usage else None) or 1120
+    )
 
     cost = _calculate_cost(input_tokens)
 

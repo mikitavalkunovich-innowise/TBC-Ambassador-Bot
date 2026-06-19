@@ -134,6 +134,9 @@ async def reject_image(
 
 async def _notify_user_approved(image: GeneratedImage, user: User, session: AsyncSession) -> None:
     """Send approved image to user and optionally edit the admin TG message."""
+    # Update flow_status unconditionally so the user isn't stuck if the bot is down
+    user.flow_status = FlowStatus.DONE
+    await session.flush()
     try:
         from app.bot.instance import get_bot, is_initialized
         if not is_initialized():
@@ -161,12 +164,15 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
             from aiogram.types import FSInputFile
             img_path = get_absolute_path(image.image_path)
             if img_path.exists():
-                await bot.send_photo(
-                    chat_id=user.telegram_id,
-                    photo=FSInputFile(str(img_path)),
-                    caption=approved_text,
-                )
-                sent_photo = True
+                try:
+                    await bot.send_photo(
+                        chat_id=user.telegram_id,
+                        photo=FSInputFile(str(img_path)),
+                        caption=approved_text,
+                    )
+                    sent_photo = True
+                except Exception:
+                    logger.warning("Local file send failed for image %s", image.id)
         if not sent_photo:
             await bot.send_message(chat_id=user.telegram_id, text=approved_text)
 
@@ -182,8 +188,6 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
         # Offer regeneration if attempts remain
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
-        user.flow_status = FlowStatus.DONE
-        await session.flush()
         if attempts_remaining > 0:
             from app.bot.instance import set_user_fsm_state
             from app.bot.keyboards.builders import regenerate_keyboard
@@ -203,6 +207,7 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
             bot_username = await settings_service.get(session, "bot_username") or ""
             markup = share_bot_keyboard(lang, bot_username) if bot_username else None
             await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text, reply_markup=markup)
+            await track_event(session, user.id, EventType.FLOW_COMPLETED)
 
         from app.core.config import get_settings
         config = get_settings()
@@ -221,6 +226,9 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
 
 async def _notify_user_rejected(image: GeneratedImage, user: User, session: AsyncSession) -> None:
     """Send rejection message to user and optionally edit the admin TG message."""
+    # Update flow_status unconditionally so the user isn't stuck if the bot is down
+    user.flow_status = FlowStatus.DONE
+    await session.flush()
     try:
         from app.bot.instance import get_bot, is_initialized
         if not is_initialized():
@@ -233,8 +241,6 @@ async def _notify_user_rejected(image: GeneratedImage, user: User, session: Asyn
 
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
-        user.flow_status = FlowStatus.DONE
-        await session.flush()
         if attempts_remaining > 0:
             from app.bot.instance import set_user_fsm_state
             from app.bot.keyboards.builders import regenerate_keyboard
@@ -254,6 +260,7 @@ async def _notify_user_rejected(image: GeneratedImage, user: User, session: Asyn
             bot_username = await settings_service.get(session, "bot_username") or ""
             markup = share_bot_keyboard(lang, bot_username) if bot_username else None
             await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text, reply_markup=markup)
+            await track_event(session, user.id, EventType.FLOW_COMPLETED)
 
         from app.core.config import get_settings
         config = get_settings()
