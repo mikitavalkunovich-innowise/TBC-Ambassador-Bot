@@ -111,8 +111,6 @@ async def generate_composite_photo(
         idx += 1
     amb_full_idx = idx
     idx += 1
-    user_face_idx = idx   # dynamically cropped from first user photo
-    idx += 1
     user_start_idx = idx
     user_end_idx = idx + n - 1
     idx += n
@@ -124,15 +122,11 @@ async def generate_composite_photo(
     )
     if n > 1:
         user_label = (
-            f"Image {user_face_idx} = USER face crop (close-up). "
-            f"Images {user_start_idx}–{user_end_idx} = USER full photos — use all {n} together "
+            f"Images {user_start_idx}–{user_end_idx} = USER photos — use all {n} together "
             f"to reconstruct their exact face, bone structure, skin tone, and hair. "
         )
     else:
-        user_label = (
-            f"Image {user_face_idx} = USER face crop (close-up). "
-            f"Image {user_start_idx} = USER full photo. "
-        )
+        user_label = f"Image {user_start_idx} = USER photo. "
 
     identity_header = (
         "IMAGE MAPPING: "
@@ -164,10 +158,6 @@ async def generate_composite_photo(
 
     parts.append(ambassador_full_part)
 
-    # User face crop (heuristic crop of the main selfie)
-    user_face_crop = _face_crop(user_photo_bytes_list[0])
-    parts.append(_make_part(user_face_crop))
-
     # All user photos (full)
     for photo_bytes in user_photo_bytes_list:
         parts.append(_make_part(photo_bytes))
@@ -178,8 +168,8 @@ async def generate_composite_photo(
     contents = [types.Content(role="user", parts=parts)]
 
     # Total image count for cost estimation fallback
-    extra_images = (1 if ambassador_face_crop_bytes is not None else 0) + 1  # amb crop + user crop
-    total_images = n + 2 + extra_images  # user photos + amb×2 + face crops
+    extra_images = 1 if ambassador_face_crop_bytes is not None else 0  # amb face crop only
+    total_images = n + 2 + extra_images  # user photos + amb×2 + optional amb face crop
 
     logger.info("Sending image generation request to gemini-3-pro-image")
 
