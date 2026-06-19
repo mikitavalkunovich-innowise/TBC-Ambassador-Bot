@@ -46,17 +46,17 @@ def generate_keyboard(lang: str) -> InlineKeyboardMarkup:
 
 def subscribed_keyboard(lang: str, channel_link: str) -> InlineKeyboardMarkup:
     sub_label = "📢 Подписаться" if lang == "ru" else "📢 Obuna bo'lish"
-    confirm_label = "✅ Я подписался" if lang == "ru" else "✅ Obuna bo'ldim"
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text=sub_label, url=channel_link),
-        InlineKeyboardButton(text=confirm_label, callback_data="sub:check"),
+    confirm_label = (
+        "Всё, теперь точно подписался!" if lang == "ru" else "Endi aniq obuna bo'ldim!"
     )
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=sub_label, url=channel_link))
+    builder.row(InlineKeyboardButton(text=confirm_label, callback_data="sub:check"))
     return builder.as_markup()
 
 
 def regenerate_keyboard(lang: str) -> InlineKeyboardMarkup:
-    label = "🔄 Сгенерировать новое" if lang == "ru" else "🔄 Yangi rasm yaratish"
+    label = "Загрузить ещё фото" if lang == "ru" else "Yana rasm yuklash"
     builder = InlineKeyboardBuilder()
     builder.button(text=label, callback_data="action:regenerate")
     return builder.as_markup()
@@ -66,6 +66,23 @@ def skip_keyboard(lang: str) -> InlineKeyboardMarkup:
     label = "⏭ Пропустить" if lang == "ru" else "⏭ O'tkazib yuborish"
     builder = InlineKeyboardBuilder()
     builder.button(text=label, callback_data="regen:skip")
+    return builder.as_markup()
+
+
+def share_bot_keyboard(lang: str, bot_username: str) -> InlineKeyboardMarkup:
+    """Button to share the bot with friends (shown after attempts exhausted)."""
+    label = "Поделиться ботом" if lang == "ru" else "Botni ulashish"
+    url = f"https://t.me/{bot_username}"
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=label, url=url))
+    return builder.as_markup()
+
+
+def channel_keyboard(lang: str, channel_link: str) -> InlineKeyboardMarkup:
+    """Button to go to the Telegram channel (shown when bot is paused)."""
+    label = "Перейти на канал" if lang == "ru" else "Kanalga o'tish"
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=label, url=channel_link))
     return builder.as_markup()
 
 

@@ -29,7 +29,13 @@ from aiogram.types import CallbackQuery, Message, PhotoSize
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards.builders import extra_photos_keyboard, regenerate_keyboard, skip_keyboard
+from app.bot.keyboards.builders import (
+    channel_keyboard,
+    extra_photos_keyboard,
+    regenerate_keyboard,
+    share_bot_keyboard,
+    skip_keyboard,
+)
 from app.bot.states import UserFlow
 from app.core.storage import (
     generate_filename,
@@ -81,7 +87,10 @@ async def send_regenerate_prompt(
 ) -> None:
     """Offer the user to generate a new photo (after approval or rejection)."""
     lang = user.language.value if user.language else "ru"
-    text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
+    max_attempts_str = await settings_service.get(session, "max_regeneration_attempts") or "3"
+    attempts_remaining = int(max_attempts_str) - user.regenerations_used
+    regen_key = "msg_regenerate_1left" if attempts_remaining == 1 else "msg_regenerate_2left"
+    text = await settings_service.get_text(session, regen_key, lang)
     await message.answer(text, reply_markup=regenerate_keyboard(lang))
     await state.set_state(UserFlow.awaiting_regeneration_input)
 
@@ -107,7 +116,16 @@ async def _check_and_enforce_budget(
     if limit > 0 and spent >= limit:
         lang = user.language.value if user.language else "ru"
         exceeded_msg = await settings_service.get_text(session, "budget_exceeded_message", lang)
-        await bot.send_message(chat_id=user.telegram_id, text=exceeded_msg)
+
+        # Build channel link for "Go to channel" button
+        channel_id = await settings_service.get(session, "telegram_channel_id") or ""
+        if channel_id.startswith("-100"):
+            ch_link = "https://t.me"
+        else:
+            ch_link = f"https://t.me/{channel_id.lstrip('@')}"
+        markup = channel_keyboard(lang, ch_link) if channel_id else None
+
+        await bot.send_message(chat_id=user.telegram_id, text=exceeded_msg, reply_markup=markup)
 
         admin_id_str = await settings_service.get(session, "admin_telegram_user_id")
         if admin_id_str:

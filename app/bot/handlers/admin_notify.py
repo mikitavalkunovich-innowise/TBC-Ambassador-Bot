@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.builders import share_bot_keyboard
 from app.core.config import get_settings
 from app.models.event import EventType
 from app.models.generation import GeneratedImage, ImageStatus
@@ -25,6 +26,14 @@ from app.services.notify_service import (
 
 router = Router(name="admin_notify")
 logger = logging.getLogger(__name__)
+
+
+async def _send_no_attempts_message(bot, user: User, session: AsyncSession, lang: str) -> None:
+    """Send the 'no attempts left' message with optional share-bot button."""
+    no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
+    bot_username = await settings_service.get(session, "bot_username") or ""
+    markup = share_bot_keyboard(lang, bot_username) if bot_username else None
+    await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text, reply_markup=markup)
 
 
 async def _send_result_to_user(
@@ -137,7 +146,8 @@ async def handle_approve(
         from app.bot.instance import set_user_fsm_state
         from app.bot.states import UserFlow
 
-        text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
+        regen_key = "msg_regenerate_1left" if attempts_remaining == 1 else "msg_regenerate_2left"
+        text = await settings_service.get_text(session, regen_key, lang)
         await bot.send_message(
             chat_id=user.telegram_id,
             text=text,
@@ -146,8 +156,7 @@ async def handle_approve(
         # Advance FSM state so the callback keyboard works
         await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
     else:
-        no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
-        await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text)
+        await _send_no_attempts_message(bot, user, session, lang)
         await track_event(session, user.id, EventType.FLOW_COMPLETED)
 
     # Edit the admin Telegram notification
@@ -215,7 +224,8 @@ async def handle_reject(
         from app.bot.instance import set_user_fsm_state
         from app.bot.states import UserFlow
 
-        text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
+        regen_key = "msg_regenerate_1left" if attempts_remaining == 1 else "msg_regenerate_2left"
+        text = await settings_service.get_text(session, regen_key, lang)
         await bot.send_message(
             chat_id=user.telegram_id,
             text=text,
@@ -223,8 +233,7 @@ async def handle_reject(
         )
         await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
     else:
-        no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
-        await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text)
+        await _send_no_attempts_message(bot, user, session, lang)
         await track_event(session, user.id, EventType.FLOW_COMPLETED)
 
     # Edit admin message
