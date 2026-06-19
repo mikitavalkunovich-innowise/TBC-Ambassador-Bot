@@ -47,7 +47,7 @@ def generate_keyboard(lang: str) -> InlineKeyboardMarkup:
 def subscribed_keyboard(lang: str, channel_link: str) -> InlineKeyboardMarkup:
     sub_label = "📢 Подписаться" if lang == "ru" else "📢 Obuna bo'lish"
     confirm_label = (
-        "Всё, теперь точно подписался!" if lang == "ru" else "Endi aniq obuna bo'ldim!"
+        "Я уже подписан" if lang == "ru" else "Obuna bo'ldim"
     )
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text=sub_label, url=channel_link))

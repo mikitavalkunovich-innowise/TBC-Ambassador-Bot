@@ -107,7 +107,8 @@ async def handle_subscription_check(
 
     if channel_id and not await _is_subscribed(bot, channel_id, tg_id):
         not_sub_text = await settings_service.get_text(session, "msg_not_subscribed", lang)
-        await callback.answer(not_sub_text, show_alert=True)
+        await callback.message.answer(not_sub_text)
+        await callback.answer()
         return
 
     # User is subscribed — record and proceed to photo

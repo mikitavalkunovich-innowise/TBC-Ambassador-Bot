@@ -126,12 +126,15 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "После подписки нажмите кнопку «Я подписался»."
     ),
     "msg_not_subscribed_ru": (
-        "❌ Вы ещё не подписались на канал. "
-        "Подпишитесь и нажмите кнопку ещё раз."
+        "Хм, не вижу вашу подписку. Пока её нет, сделать селфи с Элдором не получится 😔\n"
+        "Подпишитесь на канал и возвращайтесь."
     ),
     "msg_send_photo_ru": "📸 Отправьте ваше селфи в хорошем качестве для генерации совместного фото.",
     "msg_invalid_photo_ru": "Пожалуйста, отправьте фотографию.",
-    "msg_generating_ru": "⏳ Генерируем ваше фото… Пожалуйста, подождите.",
+    "msg_generating_ru": (
+        "Готово, фото у нас! Каждый снимок мы проверяем вручную, поэтому селфи может прийти "
+        "в течение 15 минут ⏳\nНе перезапускайте бота — пришлём фото, как только прозвучит свисток!"
+    ),
     "msg_pending_review_ru": "✅ Ваше фото отправлено на проверку. Мы уведомим вас о результате.",
     "msg_approved_ru": "🎉 Ваше фото одобрено! Вот ваш результат:",
     "msg_regenerate_prompt_ru": "Хотите сгенерировать новое фото? Нажмите кнопку ниже.",
@@ -175,12 +178,15 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "Obuna bo'lgandan so'ng «Obuna bo'ldim» tugmasini bosing."
     ),
     "msg_not_subscribed_uz": (
-        "❌ Siz hali kanalga obuna bo'lmadingiz. "
-        "Obuna bo'ling va tugmani qayta bosing."
+        "Hmm, obunangizni ko'rmayapman. Hozircha u bo'lmaganda, Eldor bilan selfi qilish mumkin emas 😔\n"
+        "Kanalga obuna bo'ling va qaytib keling."
     ),
     "msg_send_photo_uz": "📸 Birgalikdagi surat yaratish uchun yaxshi sifatli selfi yuboring.",
     "msg_invalid_photo_uz": "Iltimos, rasm yuboring.",
-    "msg_generating_uz": "⏳ Rasmingiz yaratilmoqda… Iltimos, kuting.",
+    "msg_generating_uz": (
+        "Tayyor, rasmingiz bizda! Har bir rasm qo'lda tekshiriladi, shuning uchun "
+        "selfi 15 daqiqa ichida kelishi mumkin ⏳\nBotni qayta ishga tushirmang — hushtakni eshitgan zahoti rasmni yuboramiz!"
+    ),
     "msg_pending_review_uz": "✅ Rasmingiz tekshirish uchun yuborildi. Natija haqida xabardor qilamiz.",
     "msg_approved_uz": "🎉 Rasmingiz tasdiqlandi! Mana natija:",
     "msg_regenerate_prompt_uz": "Yangi rasm yaratishni xohlaysizmi? Quyidagi tugmani bosing.",

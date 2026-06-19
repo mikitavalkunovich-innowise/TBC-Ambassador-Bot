@@ -307,8 +307,6 @@ async def _run_generation(
             await generating_msg.delete()
         except Exception:
             pass
-        pending_text = await settings_service.get_text(session, "msg_pending_review", lang)
-        await message.answer(pending_text)
 
     except Exception:
         logger.exception("Image generation failed for user %d", user.telegram_id)
