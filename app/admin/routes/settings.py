@@ -49,7 +49,8 @@ MESSAGE_KEYS = [
     "msg_pending_review",
     "msg_approved",
     "msg_video",                    # bonus video after approval
-    "msg_regenerate_prompt",        # «Generate new» offer
+    "msg_regenerate_2left",         # «Generate new» offer when 2 attempts remain
+    "msg_regenerate_1left",         # «Generate new» offer when 1 attempt remains
     "msg_regen_ask_your_photo",     # regen step 1: YOUR selfie (not ambassador)
     "msg_regen_ask_extra_photos",   # regen step 1b: extra angle photos
     "msg_regen_ask_text",           # regen step 2: text or skip

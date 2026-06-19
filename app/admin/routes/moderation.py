@@ -14,7 +14,7 @@ from app.core.database import get_db_session
 from app.core.storage import get_absolute_path, relative_to_url
 from app.models.event import EventType
 from app.models.generation import GeneratedImage, ImageStatus
-from app.models.user import User
+from app.models.user import FlowStatus, User
 from app.services import settings_service
 from app.services.analytics_service import track_event
 from app.services.notify_service import (
@@ -182,21 +182,27 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
         # Offer regeneration if attempts remain
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
+        user.flow_status = FlowStatus.DONE
+        await session.flush()
         if attempts_remaining > 0:
             from app.bot.instance import set_user_fsm_state
             from app.bot.keyboards.builders import regenerate_keyboard
             from app.bot.states import UserFlow
-            from app.models.user import FlowStatus
 
-            text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
-            user.flow_status = FlowStatus.DONE
-            await session.flush()
+            regen_key = "msg_regenerate_1left" if attempts_remaining == 1 else "msg_regenerate_2left"
+            text = await settings_service.get_text(session, regen_key, lang)
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=text,
                 reply_markup=regenerate_keyboard(lang),
             )
             await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
+        else:
+            from app.bot.keyboards.builders import share_bot_keyboard
+            no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
+            bot_username = await settings_service.get(session, "bot_username") or ""
+            markup = share_bot_keyboard(lang, bot_username) if bot_username else None
+            await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text, reply_markup=markup)
 
         from app.core.config import get_settings
         config = get_settings()
@@ -227,21 +233,27 @@ async def _notify_user_rejected(image: GeneratedImage, user: User, session: Asyn
 
         max_attempts = int(await settings_service.get(session, "max_regeneration_attempts") or "3")
         attempts_remaining = max_attempts - user.regenerations_used
+        user.flow_status = FlowStatus.DONE
+        await session.flush()
         if attempts_remaining > 0:
             from app.bot.instance import set_user_fsm_state
             from app.bot.keyboards.builders import regenerate_keyboard
             from app.bot.states import UserFlow
-            from app.models.user import FlowStatus
 
-            text = await settings_service.get_text(session, "msg_regenerate_prompt", lang)
-            user.flow_status = FlowStatus.DONE
-            await session.flush()
+            regen_key = "msg_regenerate_1left" if attempts_remaining == 1 else "msg_regenerate_2left"
+            text = await settings_service.get_text(session, regen_key, lang)
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=text,
                 reply_markup=regenerate_keyboard(lang),
             )
             await set_user_fsm_state(user.telegram_id, UserFlow.awaiting_regeneration_input)
+        else:
+            from app.bot.keyboards.builders import share_bot_keyboard
+            no_attempts_text = await settings_service.get_text(session, "msg_no_attempts_left", lang)
+            bot_username = await settings_service.get(session, "bot_username") or ""
+            markup = share_bot_keyboard(lang, bot_username) if bot_username else None
+            await bot.send_message(chat_id=user.telegram_id, text=no_attempts_text, reply_markup=markup)
 
         from app.core.config import get_settings
         config = get_settings()
