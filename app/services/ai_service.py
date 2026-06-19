@@ -2,7 +2,6 @@
 AI image generation service using Gemini 3 Pro Image (Nano Banana Pro).
 Model: gemini-3-pro-image
 """
-import io
 import logging
 from dataclasses import dataclass
 from decimal import Decimal
@@ -19,6 +18,15 @@ logger = logging.getLogger(__name__)
 COST_PER_1K_INPUT_TOKENS = Decimal("0.002")   # $2 per 1M input tokens
 COST_PER_OUTPUT_IMAGE = Decimal("0.134")       # $0.134 per generated image (1K resolution)
 TOKENS_PER_INPUT_IMAGE = 560                   # Each input image costs 560 tokens
+
+
+def _detect_mime(data: bytes) -> str:
+    """Detect MIME type from file magic bytes."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
 
 
 @dataclass
@@ -56,7 +64,7 @@ async def generate_composite_photo(
         user_photo_bytes_list: One or more JPEG selfies of the user (main + optional extra angles).
                                Multiple photos improve likeness accuracy, especially for
                                Turkic / Central Asian facial features.
-        ambassador_photo_bytes: JPEG bytes of the ambassador's reference photo.
+        ambassador_photo_bytes: Raw bytes of the ambassador's reference photo (JPEG/PNG auto-detected).
         prompt_template: Generation prompt template (may contain {extra} placeholder).
         extra_prompt: Optional additional instructions from the user.
 
@@ -66,26 +74,32 @@ async def generate_composite_photo(
     settings = get_settings()
     client = genai.Client(api_key=settings.google_ai_api_key)
 
-    # Build the prompt — prepend a multi-photo identity header when extra angles are provided
+    # Always prepend an identity header so the model knows which image is which person.
+    # For multiple user photos, clarify that all photos before the last one are the user.
     n = len(user_photo_bytes_list)
     if n > 1:
         identity_header = (
-            f"IDENTITY REFERENCE: The user (Person 1) is shown in the first {n} photos provided "
-            f"— use all {n} together to accurately reconstruct their exact facial features, "
-            f"bone structure, skin tone, and hair. The ambassador (Person 2) is in the last photo."
+            f"IMAGE MAPPING: Images 1–{n} (all except the last) = USER (Person 1). "
+            f"Use all {n} user photos together to reconstruct their exact face, bone structure, "
+            f"skin tone, and hair. Image {n + 1} (the LAST image) = AMBASSADOR (Person 2). "
+            f"NEVER swap these two identities."
         )
-        raw_prompt = prompt_template.format(extra=extra_prompt or "").strip()
-        prompt_text = identity_header + "\n\n" + raw_prompt
     else:
-        prompt_text = prompt_template.format(extra=extra_prompt or "").strip()
+        identity_header = (
+            "IMAGE MAPPING: Image 1 = USER (Person 1). "
+            "Image 2 (the LAST image) = AMBASSADOR (Person 2). "
+            "NEVER swap these two identities."
+        )
+    raw_prompt = prompt_template.format(extra=extra_prompt or "").strip()
+    prompt_text = identity_header + "\n\n" + raw_prompt
 
-    # Build parts: text prompt → all user photos → ambassador photo
+    # Build parts: text prompt → all user photos → ambassador photo (always last)
     parts: list[types.Part] = [types.Part(text=prompt_text)]
     for photo_bytes in user_photo_bytes_list:
         parts.append(
             types.Part(
                 inline_data=types.Blob(
-                    mime_type="image/jpeg",
+                    mime_type=_detect_mime(photo_bytes),
                     data=photo_bytes,
                 )
             )
@@ -93,7 +107,7 @@ async def generate_composite_photo(
     parts.append(
         types.Part(
             inline_data=types.Blob(
-                mime_type="image/jpeg",
+                mime_type=_detect_mime(ambassador_photo_bytes),
                 data=ambassador_photo_bytes,
             )
         )
@@ -108,6 +122,9 @@ async def generate_composite_photo(
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
+            thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
+            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+            image_config=types.ImageConfig(image_size="2K"),
         ),
     )
 
