@@ -238,6 +238,8 @@ async def _run_generation(
             extra_prompt=extra_prompt,
             ambassador_face_crop_bytes=ambassador_face_crop_bytes,
             system_instruction=system_instruction,
+            thinking_budget=-1,  # Dynamic thinking (Nano Banana Pro)
+            temperature=0.2,     # Precise / low variance
         )
 
         frame_path_rel = await settings_service.get(session, f"frame_path_{lang}")
