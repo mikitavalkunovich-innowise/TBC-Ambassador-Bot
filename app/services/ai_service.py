@@ -2,12 +2,10 @@
 AI image generation service using Gemini 3 Pro Image (Nano Banana Pro).
 Model: gemini-3-pro-image
 """
-import io
 import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
-from PIL import Image
 from google import genai
 from google.genai import types
 
@@ -39,23 +37,6 @@ class GenerationResult:
     cost_usd: Decimal
 
 
-def _face_crop(image_bytes: bytes) -> bytes:
-    """Crop the middle vertical zone of an image where the face typically appears.
-
-    Targets the 10%–65% vertical range, which captures the face and shoulders
-    for both close-up selfies and 3/4-body portrait shots.
-    Returns JPEG bytes at quality 92.
-    """
-    img = Image.open(io.BytesIO(image_bytes))
-    w, h = img.size
-    top = 0
-    bottom = int(h * 0.55)
-    cropped = img.crop((0, top, w, bottom))
-    buf = io.BytesIO()
-    cropped.save(buf, format="JPEG", quality=92)
-    return buf.getvalue()
-
-
 def _calculate_cost(input_tokens: int) -> Decimal:
     """
     Calculate generation cost.
@@ -75,13 +56,12 @@ async def generate_composite_photo(
     """
     Generate a composite photo of the user and the TBC ambassador.
 
-    Image layout sent to Gemini (with face crops):
-        [prompt text]
-        → AMBASSADOR face crop  (high-res facial detail)
-        → AMBASSADOR full photo (body, clothing, context)
-        → USER face crop        (high-res facial detail)
-        → USER full photo(s)    (body, clothing, context)
-        → AMBASSADOR full photo (second identity anchor)
+    Image layout sent to Gemini (interleaved text labels + images):
+        [intro text + prompt]
+        → "AMBASSADOR face close-up:" + AMBASSADOR face crop (if provided)
+        → "AMBASSADOR full body reference:" + AMBASSADOR full photo
+        → "USER reference photo(s):" + USER photo(s)
+        → "AMBASSADOR identity anchor:" + AMBASSADOR full photo
 
     Args:
         user_photo_bytes_list: One or more selfies of the user (main + optional extra angles).
