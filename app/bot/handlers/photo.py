@@ -303,11 +303,6 @@ async def _run_generation(
             except Exception:
                 logger.exception("Failed to send admin notification")
 
-        try:
-            await generating_msg.delete()
-        except Exception:
-            pass
-
     except Exception:
         logger.exception("Image generation failed for user %d", user.telegram_id)
         image_record.status = ImageStatus.REJECTED
