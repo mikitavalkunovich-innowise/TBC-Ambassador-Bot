@@ -17,11 +17,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import get_current_admin
-from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.storage import get_absolute_path, get_upload_path, ensure_dirs
 from app.services import settings_service
-from app.services.ai_service import generate_composite_photo
+from app.services.ai_service import DEFAULT_SYSTEM_INSTRUCTION, generate_composite_photo
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/admin/templates")
@@ -31,6 +30,7 @@ logger = logging.getLogger(__name__)
 class GenerateRequest(BaseModel):
     photo_id: str
     prompt: str
+    system_instruction: str = ""
 
 
 @router.get("/current-prompt", response_model=None)
@@ -57,6 +57,7 @@ async def debug_page(
             "request": request,
             "active_page": "debug",
             "current_prompt": current_prompt,
+            "default_system_instruction": DEFAULT_SYSTEM_INSTRUCTION,
         },
     )
 
@@ -129,6 +130,7 @@ async def debug_generate(
             prompt_template=body.prompt,
             extra_prompt="",
             ambassador_face_crop_bytes=ambassador_face_crop_bytes,
+            system_instruction=body.system_instruction or None,
         )
     except Exception as exc:
         logger.exception("Debug generation failed")

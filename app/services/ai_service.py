@@ -19,6 +19,14 @@ COST_PER_1K_INPUT_TOKENS = Decimal("0.002")   # $2 per 1M input tokens
 COST_PER_OUTPUT_IMAGE = Decimal("0.134")       # $0.134 per generated image (1K resolution)
 TOKENS_PER_INPUT_IMAGE = 560                   # Each input image costs 560 tokens
 
+DEFAULT_SYSTEM_INSTRUCTION = (
+    "You are a photorealistic image compositor. "
+    "Your absolute constraint: reproduce every person's face exactly as shown "
+    "in the reference photos — identical facial features, skin tone, ethnicity, "
+    "hair, and proportions. Never alter, idealize, westernize, or average any "
+    "person's appearance. The output must be indistinguishable from a real photograph."
+)
+
 
 def _detect_mime(data: bytes) -> str:
     """Detect MIME type from file magic bytes."""
@@ -52,6 +60,7 @@ async def generate_composite_photo(
     prompt_template: str,
     extra_prompt: str = "",
     ambassador_face_crop_bytes: bytes | None = None,
+    system_instruction: str | None = None,
 ) -> GenerationResult:
     """
     Generate a composite photo of the user and the TBC ambassador.
@@ -70,6 +79,8 @@ async def generate_composite_photo(
         extra_prompt: Optional additional instructions from the user.
         ambassador_face_crop_bytes: Pre-cropped face region of the ambassador photo (optional).
                                     If None, only the full photo is used for the ambassador.
+        system_instruction: Override for the model's system instruction.
+                            Defaults to DEFAULT_SYSTEM_INSTRUCTION if not provided.
 
     Returns:
         GenerationResult with image bytes and cost information.
@@ -136,13 +147,7 @@ async def generate_composite_photo(
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
-            system_instruction=(
-                "You are a photorealistic image compositor. "
-                "Your absolute constraint: reproduce every person's face exactly as shown "
-                "in the reference photos — identical facial features, skin tone, ethnicity, "
-                "hair, and proportions. Never alter, idealize, westernize, or average any "
-                "person's appearance. The output must be indistinguishable from a real photograph."
-            ),
+            system_instruction=system_instruction or DEFAULT_SYSTEM_INSTRUCTION,
         ),
     )
 

@@ -34,10 +34,26 @@
       </div>
     </div>
 
+    <!-- System instruction (collapsible) -->
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center fw-semibold"
+           style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#sysInstructCollapse">
+        <span><i class="bi bi-shield-lock me-1"></i>System Instruction</span>
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="sysInstructCollapse" class="collapse">
+        <div class="card-body p-0">
+          <textarea id="sysInstructTextarea" class="form-control border-0 rounded-0 rounded-bottom"
+                    rows="6" style="font-size:.82rem; font-family:monospace; resize:vertical;"
+                    placeholder="System instruction for the model…">{{ default_system_instruction }}</textarea>
+        </div>
+      </div>
+    </div>
+
     <!-- Prompt editor -->
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
-        <span><i class="bi bi-pencil-square me-1"></i>Prompt</span>
+        <span><i class="bi bi-pencil-square me-1"></i>User Prompt</span>
         <button class="btn btn-sm btn-outline-secondary" id="loadPromptBtn" type="button">
           <i class="bi bi-arrow-down-circle me-1"></i>Load from Settings
         </button>
@@ -196,10 +212,11 @@
     resultPlaceholder.innerHTML = '<div class="spinner-border text-primary mb-2"></div><div class="small text-muted">Generating… this may take 30–60 s</div>';
 
     try {
+      const sysInstruct = document.getElementById('sysInstructTextarea').value.trim();
       const resp = await fetch('/admin/debug/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photo_id: photoId, prompt }),
+        body: JSON.stringify({ photo_id: photoId, prompt, system_instruction: sysInstruct }),
       });
       const data = await resp.json();
 
