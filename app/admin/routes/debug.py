@@ -32,8 +32,8 @@ class GenerateRequest(BaseModel):
     prompt: str
     system_instruction: str = ""
     model: str = "gemini-3-pro-image"
-    image_size: str = ""
-    aspect_ratio: str = ""
+    thinking_budget: int | None = None
+    temperature: float | None = None
 
 
 @router.get("/current-prompt", response_model=None)
@@ -137,8 +137,8 @@ async def debug_generate(
             ambassador_face_crop_bytes=ambassador_face_crop_bytes,
             system_instruction=body.system_instruction or None,
             model=body.model or "gemini-3-pro-image",
-            image_size=body.image_size or None,
-            aspect_ratio=body.aspect_ratio or None,
+            thinking_budget=body.thinking_budget,
+            temperature=body.temperature,
         )
     except Exception as exc:
         logger.exception("Debug generation failed")
@@ -166,6 +166,6 @@ async def debug_generate(
         "cost_usd": float(result.cost_usd),
         "input_tokens": result.input_tokens,
         "model": body.model,
-        "image_size": body.image_size or "default (1K)",
-        "aspect_ratio": body.aspect_ratio or "default",
+        "thinking_budget": body.thinking_budget,
+        "temperature": body.temperature,
     })

@@ -62,8 +62,8 @@ async def generate_composite_photo(
     ambassador_face_crop_bytes: bytes | None = None,
     system_instruction: str | None = None,
     model: str = "gemini-3-pro-image",
-    image_size: str | None = None,
-    aspect_ratio: str | None = None,
+    thinking_budget: int | None = None,
+    temperature: float | None = None,
 ) -> GenerationResult:
     """
     Generate a composite photo of the user and the TBC ambassador.
@@ -85,10 +85,9 @@ async def generate_composite_photo(
         system_instruction: Override for the model's system instruction.
                             Defaults to DEFAULT_SYSTEM_INSTRUCTION if not provided.
         model: Gemini model slug (e.g. "gemini-3-pro-image", "gemini-3.1-flash-image").
-        image_size: Output resolution — "1K", "2K", "4K" (or "512" for flash models).
-                    If None, the model default (1K) is used.
-        aspect_ratio: Output aspect ratio, e.g. "9:16", "1:1", "4:5".
-                      If None, the model default is used.
+        thinking_budget: Token budget for thinking mode. 0 = disabled, -1 = dynamic.
+                         Only supported by some models; ignored if model rejects it.
+        temperature: Sampling temperature (0.0–2.0). Lower = more deterministic.
 
     Returns:
         GenerationResult with image bytes and cost information.
@@ -150,15 +149,11 @@ async def generate_composite_photo(
 
     logger.info("Sending image generation request to %s", model)
 
-    # Build response_format only when the caller requests a specific size/ratio.
-    # Omitting it lets the model use its default (1K).
-    image_config: dict | None = None
-    if image_size or aspect_ratio:
-        image_config = {}
-        if image_size:
-            image_config["image_size"] = image_size
-        if aspect_ratio:
-            image_config["aspect_ratio"] = aspect_ratio
+    thinking_config = (
+        types.ThinkingConfig(thinking_budget=thinking_budget)
+        if thinking_budget is not None
+        else None
+    )
 
     response = await client.aio.models.generate_content(
         model=model,
@@ -166,7 +161,8 @@ async def generate_composite_photo(
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
             system_instruction=system_instruction or DEFAULT_SYSTEM_INSTRUCTION,
-            **({"response_format": {"image": image_config}} if image_config else {}),
+            **({"thinking_config": thinking_config} if thinking_config is not None else {}),
+            **({"temperature": temperature} if temperature is not None else {}),
         ),
     )
 

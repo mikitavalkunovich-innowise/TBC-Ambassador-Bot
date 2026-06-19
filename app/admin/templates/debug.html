@@ -48,24 +48,23 @@
             </select>
           </div>
           <div class="col-6">
-            <label class="form-label small fw-semibold mb-1">Image size</label>
-            <select id="imageSizeSelect" class="form-select form-select-sm">
-              <option value="" selected>Default (1K)</option>
-              <option value="1K">1K (~1024px)</option>
-              <option value="2K">2K (~2048px)</option>
-              <option value="4K">4K (~4096px)</option>
+            <label class="form-label small fw-semibold mb-1">Thinking budget</label>
+            <select id="thinkingBudgetSelect" class="form-select form-select-sm">
+              <option value="" selected>Off (default)</option>
+              <option value="-1">Dynamic (auto)</option>
+              <option value="512">Low (512 tokens)</option>
+              <option value="2048">Medium (2048 tokens)</option>
+              <option value="8192">High (8192 tokens)</option>
             </select>
           </div>
           <div class="col-6">
-            <label class="form-label small fw-semibold mb-1">Aspect ratio</label>
-            <select id="aspectRatioSelect" class="form-select form-select-sm">
+            <label class="form-label small fw-semibold mb-1">Temperature</label>
+            <select id="temperatureSelect" class="form-select form-select-sm">
               <option value="" selected>Default</option>
-              <option value="1:1">1:1 (square)</option>
-              <option value="9:16">9:16 (portrait / stories)</option>
-              <option value="4:5">4:5 (Instagram portrait)</option>
-              <option value="3:4">3:4 (portrait)</option>
-              <option value="4:3">4:3 (landscape)</option>
-              <option value="16:9">16:9 (wide)</option>
+              <option value="0.2">0.2 (precise)</option>
+              <option value="0.5">0.5 (balanced)</option>
+              <option value="0.8">0.8 (creative)</option>
+              <option value="1.0">1.0 (max creative)</option>
             </select>
           </div>
         </div>
@@ -148,8 +147,8 @@
             <div class="col-4">
               <div class="card bg-light">
                 <div class="card-body py-2">
-                  <div class="small text-muted">Size</div>
-                  <div class="fw-bold" id="metaSize">—</div>
+                  <div class="small text-muted">Thinking</div>
+                  <div class="fw-bold" id="metaThinking">—</div>
                 </div>
               </div>
             </div>
@@ -267,8 +266,8 @@
     try {
       const sysInstruct = document.getElementById('sysInstructTextarea').value.trim();
       const model = document.getElementById('modelSelect').value;
-      const imageSize = document.getElementById('imageSizeSelect').value;
-      const aspectRatio = document.getElementById('aspectRatioSelect').value;
+      const thinkingRaw = document.getElementById('thinkingBudgetSelect').value;
+      const temperatureRaw = document.getElementById('temperatureSelect').value;
       const resp = await fetch('/admin/debug/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,8 +276,8 @@
           prompt,
           system_instruction: sysInstruct,
           model,
-          image_size: imageSize,
-          aspect_ratio: aspectRatio,
+          thinking_budget: thinkingRaw !== '' ? parseInt(thinkingRaw) : null,
+          temperature: temperatureRaw !== '' ? parseFloat(temperatureRaw) : null,
         }),
       });
       const data = await resp.json();
@@ -291,8 +290,8 @@
 
       document.getElementById('metaCost').textContent = '$' + data.cost_usd.toFixed(4);
       document.getElementById('metaTokens').textContent = data.input_tokens.toLocaleString();
-      document.getElementById('metaSize').textContent = data.image_size;
-      document.getElementById('metaModel').textContent = data.model + ' · ' + data.aspect_ratio;
+      document.getElementById('metaThinking').textContent = data.thinking_budget != null ? data.thinking_budget + ' tok' : 'off';
+      document.getElementById('metaModel').textContent = data.model + (data.temperature != null ? ' · t=' + data.temperature : '');
       resultDownload.href = data.image_url;
       resultMeta.classList.remove('d-none');
 
