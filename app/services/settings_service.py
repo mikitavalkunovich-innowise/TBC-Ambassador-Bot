@@ -18,6 +18,7 @@ _CACHE_TTL = 60.0  # seconds
 DEFAULT_SETTINGS: dict[str, str] = {
     # Bot infrastructure
     "bot_token": "",
+    "bot_username": "",          # used for the "share bot" button (without @)
     "telegram_channel_id": "",
     "admin_telegram_user_id": "",
     "privacy_policy_url": "https://example.com/privacy",
@@ -126,6 +127,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "msg_pending_review_ru": "✅ Ваше фото отправлено на проверку. Мы уведомим вас о результате.",
     "msg_approved_ru": "🎉 Ваше фото одобрено! Вот ваш результат:",
     "msg_regenerate_prompt_ru": "Хотите сгенерировать новое фото? Нажмите кнопку ниже.",
+    "msg_regenerate_2left_ru": "Хотите попробовать ещё раз? У вас осталось две попытки.",
+    "msg_regenerate_1left_ru": "Хотите попробовать ещё раз? У вас осталась одна попытка.",
     "msg_regen_ask_photo_ru": (
         "📸 Хотите загрузить новое селфи?\n"
         "Отправьте фото или нажмите «Пропустить»."
@@ -173,6 +176,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "msg_pending_review_uz": "✅ Rasmingiz tekshirish uchun yuborildi. Natija haqida xabardor qilamiz.",
     "msg_approved_uz": "🎉 Rasmingiz tasdiqlandi! Mana natija:",
     "msg_regenerate_prompt_uz": "Yangi rasm yaratishni xohlaysizmi? Quyidagi tugmani bosing.",
+    "msg_regenerate_2left_uz": "Yana bitta rasm olasizmi? Sizda yana 2 ta imkoniyat bor.",
+    "msg_regenerate_1left_uz": "Yana bitta rasm olasizmi? Sizda yana 1 ta imkoniyat bor.",
     "msg_regen_ask_photo_uz": (
         "📸 Yangi selfi yuklashni xohlaysizmi?\n"
         "Rasm yuboring yoki «O'tkazib yuborish» tugmasini bosing."
