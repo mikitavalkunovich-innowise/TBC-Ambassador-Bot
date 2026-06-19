@@ -100,69 +100,47 @@ async def generate_composite_photo(
     n = len(user_photo_bytes_list)
 
     # -------------------------------------------------------------------------
-    # Build the image mapping header so the model knows exactly who is who.
-    # Image indices start from 1 and are laid out as:
-    #   amb_face_crop | amb_full | user_face_crop | user_full(s) | amb_full_anchor
-    # -------------------------------------------------------------------------
-    idx = 1
-    amb_face_idx: int | None = None
-    if ambassador_face_crop_bytes is not None:
-        amb_face_idx = idx
-        idx += 1
-    amb_full_idx = idx
-    idx += 1
-    user_start_idx = idx
-    user_end_idx = idx + n - 1
-    idx += n
-    amb_anchor_idx = idx
-
-    amb_face_label = (
-        f"Image {amb_face_idx} = AMBASSADOR face crop (close-up, high detail). "
-        if amb_face_idx is not None else ""
-    )
-    if n > 1:
-        user_label = (
-            f"Images {user_start_idx}–{user_end_idx} = USER photos — use all {n} together "
-            f"to reconstruct their exact face, bone structure, skin tone, and hair. "
-        )
-    else:
-        user_label = f"Image {user_start_idx} = USER photo. "
-
-    identity_header = (
-        "IMAGE MAPPING: "
-        + amb_face_label
-        + f"Image {amb_full_idx} = AMBASSADOR full photo (Person 2, first anchor). "
-        + user_label
-        + f"Image {amb_anchor_idx} = AMBASSADOR full photo (Person 2, second anchor — same person). "
-        "NEVER swap Person 1 and Person 2."
-    )
-
-    # Use replace instead of .format() to avoid KeyError if the admin adds {other_vars}
-    raw_prompt = prompt_template.replace("{extra}", extra_prompt or "").strip()
-    prompt_text = identity_header + "\n\n" + raw_prompt
-
-    # -------------------------------------------------------------------------
-    # Assemble parts in the declared order
+    # Assemble parts with interleaved text labels directly before each image.
+    # The model processes tokens sequentially, so labelling each photo right
+    # before it appears is more reliable than a single upfront IMAGE MAPPING block.
     # -------------------------------------------------------------------------
     def _make_part(data: bytes) -> types.Part:
         return types.Part(
             inline_data=types.Blob(mime_type=_detect_mime(data), data=data)
         )
 
+    # Use replace instead of .format() to avoid KeyError if the admin adds {other_vars}
+    raw_prompt = prompt_template.replace("{extra}", extra_prompt or "").strip()
+
+    intro = (
+        "Generate a photorealistic composite image following these instructions.\n"
+        "Reproduce each person's face exactly as shown in the labeled reference photos below. "
+        "NEVER swap Person 1 and Person 2.\n\n"
+        + raw_prompt
+    )
+
     ambassador_full_part = _make_part(ambassador_photo_bytes)
 
-    parts: list[types.Part] = [types.Part(text=prompt_text)]
+    parts: list[types.Part] = [types.Part(text=intro)]
 
     if ambassador_face_crop_bytes is not None:
+        parts.append(types.Part(text="AMBASSADOR (Person 2) — face close-up for maximum facial detail:"))
         parts.append(_make_part(ambassador_face_crop_bytes))
 
+    parts.append(types.Part(text="AMBASSADOR (Person 2) — full body reference photo:"))
     parts.append(ambassador_full_part)
 
-    # All user photos (full)
-    for photo_bytes in user_photo_bytes_list:
-        parts.append(_make_part(photo_bytes))
+    if n == 1:
+        parts.append(types.Part(text="USER (Person 1) — reference photo:"))
+        parts.append(_make_part(user_photo_bytes_list[0]))
+    else:
+        parts.append(types.Part(
+            text=f"USER (Person 1) — {n} reference photos, use all together to reconstruct exact face:"
+        ))
+        for photo_bytes in user_photo_bytes_list:
+            parts.append(_make_part(photo_bytes))
 
-    # Ambassador second anchor
+    parts.append(types.Part(text="AMBASSADOR (Person 2) — identity anchor (same person as above):"))
     parts.append(ambassador_full_part)
 
     contents = [types.Content(role="user", parts=parts)]
