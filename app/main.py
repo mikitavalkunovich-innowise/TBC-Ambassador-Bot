@@ -28,6 +28,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Bundled ambassador photo — committed to the repo so it is always present
+_BUNDLED_AMBASSADOR_SRC = Path(__file__).parent / "resources" / "ambassador_canonical.jpeg"
+_BUNDLED_AMBASSADOR_DST = "ambassador/ambassador_canonical.jpeg"
+
+
+def _ensure_bundled_ambassador_photo(uploads_path: Path) -> None:
+    """Copy the canonical ambassador photo from the app package to the uploads volume."""
+    dst = uploads_path / _BUNDLED_AMBASSADOR_DST
+    if dst.exists():
+        return
+    if not _BUNDLED_AMBASSADOR_SRC.exists():
+        logger.warning("Bundled ambassador photo not found at %s", _BUNDLED_AMBASSADOR_SRC)
+        return
+    import shutil
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(_BUNDLED_AMBASSADOR_SRC, dst)
+    logger.info("Copied bundled ambassador photo to %s", dst)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +55,12 @@ async def lifespan(app: FastAPI):
     # Ensure upload directories exist
     ensure_dirs()
     logger.info("Upload directories verified at %s", settings.uploads_dir)
+
+    # Copy bundled ambassador photo to the uploads volume if it isn't there yet.
+    # app/resources/ambassador_canonical.jpeg is committed to the repo and always
+    # deployed with the code; /data/uploads/ is a persistent Railway volume that
+    # starts empty on first deploy.
+    _ensure_bundled_ambassador_photo(settings.uploads_path)
 
     # Seed default settings and try to initialize the bot
     async with async_session_factory() as session:
