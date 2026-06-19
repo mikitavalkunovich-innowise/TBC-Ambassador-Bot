@@ -124,7 +124,7 @@ async def generate_composite_photo(
     )
     if n > 1:
         user_label = (
-            f"Images {user_face_idx} = USER face crop (close-up). "
+            f"Image {user_face_idx} = USER face crop (close-up). "
             f"Images {user_start_idx}–{user_end_idx} = USER full photos — use all {n} together "
             f"to reconstruct their exact face, bone structure, skin tone, and hair. "
         )
