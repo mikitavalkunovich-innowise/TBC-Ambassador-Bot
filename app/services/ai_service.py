@@ -61,6 +61,9 @@ async def generate_composite_photo(
     extra_prompt: str = "",
     ambassador_face_crop_bytes: bytes | None = None,
     system_instruction: str | None = None,
+    model: str = "gemini-3-pro-image",
+    image_size: str | None = None,
+    aspect_ratio: str | None = None,
 ) -> GenerationResult:
     """
     Generate a composite photo of the user and the TBC ambassador.
@@ -81,6 +84,11 @@ async def generate_composite_photo(
                                     If None, only the full photo is used for the ambassador.
         system_instruction: Override for the model's system instruction.
                             Defaults to DEFAULT_SYSTEM_INSTRUCTION if not provided.
+        model: Gemini model slug (e.g. "gemini-3-pro-image", "gemini-3.1-flash-image").
+        image_size: Output resolution — "1K", "2K", "4K" (or "512" for flash models).
+                    If None, the model default (1K) is used.
+        aspect_ratio: Output aspect ratio, e.g. "9:16", "1:1", "4:5".
+                      If None, the model default is used.
 
     Returns:
         GenerationResult with image bytes and cost information.
@@ -140,14 +148,25 @@ async def generate_composite_photo(
     extra_images = 1 if ambassador_face_crop_bytes is not None else 0  # amb face crop only
     total_images = n + 2 + extra_images  # user photos + amb×2 + optional amb face crop
 
-    logger.info("Sending image generation request to gemini-3-pro-image")
+    logger.info("Sending image generation request to %s", model)
+
+    # Build response_format only when the caller requests a specific size/ratio.
+    # Omitting it lets the model use its default (1K).
+    image_config: dict | None = None
+    if image_size or aspect_ratio:
+        image_config = {}
+        if image_size:
+            image_config["image_size"] = image_size
+        if aspect_ratio:
+            image_config["aspect_ratio"] = aspect_ratio
 
     response = await client.aio.models.generate_content(
-        model="gemini-3-pro-image",
+        model=model,
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
             system_instruction=system_instruction or DEFAULT_SYSTEM_INSTRUCTION,
+            **({"response_format": {"image": image_config}} if image_config else {}),
         ),
     )
 
