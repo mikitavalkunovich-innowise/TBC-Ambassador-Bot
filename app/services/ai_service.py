@@ -70,28 +70,47 @@ async def generate_composite_photo(
     # Use the async client so the long-running Gemini call doesn't block the event loop
     client = genai.Client(api_key=settings.google_ai_api_key)
 
-    # Always prepend an identity header so the model knows which image is which person.
-    # For multiple user photos, clarify that all photos before the last one are the user.
+    # Build image mapping header.
+    # Layout: ambassador (anchor) → user photos → ambassador (anchor again).
+    # Sending the ambassador photo twice uses both available character slots
+    # for Person 2, which significantly strengthens identity anchoring.
     n = len(user_photo_bytes_list)
+    ambassador_slot = 1
+    user_start = 2
+    user_end = user_start + n - 1
+    ambassador_repeat = user_end + 1
+
     if n > 1:
         identity_header = (
-            f"IMAGE MAPPING: Images 1–{n} (all except the last) = USER (Person 1). "
-            f"Use all {n} user photos together to reconstruct their exact face, bone structure, "
-            f"skin tone, and hair. Image {n + 1} (the LAST image) = AMBASSADOR (Person 2). "
-            f"NEVER swap these two identities."
+            f"IMAGE MAPPING: "
+            f"Image {ambassador_slot} = AMBASSADOR (Person 2, first anchor). "
+            f"Images {user_start}–{user_end} = USER (Person 1) — use all {n} photos together "
+            f"to reconstruct their exact face, bone structure, skin tone, and hair. "
+            f"Image {ambassador_repeat} = AMBASSADOR (Person 2, second anchor — same person, reinforces identity). "
+            f"NEVER swap Person 1 and Person 2."
         )
     else:
         identity_header = (
-            "IMAGE MAPPING: Image 1 = USER (Person 1). "
-            "Image 2 (the LAST image) = AMBASSADOR (Person 2). "
-            "NEVER swap these two identities."
+            "IMAGE MAPPING: "
+            f"Image {ambassador_slot} = AMBASSADOR (Person 2, first anchor). "
+            f"Image {user_start} = USER (Person 1). "
+            f"Image {ambassador_repeat} = AMBASSADOR (Person 2, second anchor — same person, reinforces identity). "
+            "NEVER swap Person 1 and Person 2."
         )
+
     # Use replace instead of .format() to avoid KeyError if the admin adds {other_vars}
     raw_prompt = prompt_template.replace("{extra}", extra_prompt or "").strip()
     prompt_text = identity_header + "\n\n" + raw_prompt
 
-    # Build parts: text prompt → all user photos → ambassador photo (always last)
+    # Build parts: ambassador (anchor) → user photos → ambassador (anchor again)
+    ambassador_part = types.Part(
+        inline_data=types.Blob(
+            mime_type=_detect_mime(ambassador_photo_bytes),
+            data=ambassador_photo_bytes,
+        )
+    )
     parts: list[types.Part] = [types.Part(text=prompt_text)]
+    parts.append(ambassador_part)
     for photo_bytes in user_photo_bytes_list:
         parts.append(
             types.Part(
@@ -101,14 +120,7 @@ async def generate_composite_photo(
                 )
             )
         )
-    parts.append(
-        types.Part(
-            inline_data=types.Blob(
-                mime_type=_detect_mime(ambassador_photo_bytes),
-                data=ambassador_photo_bytes,
-            )
-        )
-    )
+    parts.append(ambassador_part)
 
     contents = [types.Content(role="user", parts=parts)]
 
@@ -119,6 +131,13 @@ async def generate_composite_photo(
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
+            system_instruction=(
+                "You are a photorealistic image compositor. "
+                "Your absolute constraint: reproduce every person's face exactly as shown "
+                "in the reference photos — identical facial features, skin tone, ethnicity, "
+                "hair, and proportions. Never alter, idealize, westernize, or average any "
+                "person's appearance. The output must be indistinguishable from a real photograph."
+            ),
         ),
     )
 
@@ -139,7 +158,7 @@ async def generate_composite_photo(
 
     # Extract token usage for cost tracking
     usage = response.usage_metadata
-    total_images = len(user_photo_bytes_list) + 1  # user photos + ambassador
+    total_images = len(user_photo_bytes_list) + 2  # user photos + ambassador sent twice
     input_tokens = (
         (usage.prompt_token_count if usage else None)
         or (total_images * TOKENS_PER_INPUT_IMAGE + 300)
