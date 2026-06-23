@@ -48,6 +48,7 @@ async def initialize(token: str) -> tuple[Bot, Dispatcher]:
 
     from app.bot.router import setup_dispatcher
     from app.bot.middlewares.db_session import DBSessionMiddleware
+    from app.bot.middlewares.blocked_user import BlockedUserMiddleware
 
     _bot = Bot(
         token=token,
@@ -55,8 +56,10 @@ async def initialize(token: str) -> tuple[Bot, Dispatcher]:
     )
     _dp = Dispatcher(storage=MemoryStorage())
 
-    # Register the DB session middleware on all update types
+    # DBSessionMiddleware runs first and injects session into data dict.
+    # BlockedUserMiddleware runs second and uses that session to check blocks.
     _dp.update.middleware(DBSessionMiddleware())
+    _dp.update.middleware(BlockedUserMiddleware())
 
     setup_dispatcher(_dp)
 

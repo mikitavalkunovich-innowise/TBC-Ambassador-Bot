@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.storage import generate_filename, get_absolute_path, save_upload
 from app.services import settings_service
+from app.services.blocked_service import add_blocked, list_blocked, remove_blocked
 from app.services.storage_service import cleanup_old_local_files, get_storage_stats
 from app.services.user_service import reset_user_flow
 
@@ -88,6 +89,13 @@ async def settings_page(
         except Exception:
             logger.exception("Failed to load storage stats")
 
+    blocked_users = []
+    if tab == "blocked":
+        try:
+            blocked_users = await list_blocked(session)
+        except Exception:
+            logger.exception("Failed to load blocked users list")
+
     return templates.TemplateResponse(
         "settings.html",
         {
@@ -98,6 +106,9 @@ async def settings_page(
             "active_tab": tab,
             "saved": request.query_params.get("saved"),
             "storage_stats": storage_stats,
+            "blocked_users": blocked_users,
+            "block_error": request.query_params.get("block_error"),
+            "block_added": request.query_params.get("block_added"),
         },
     )
 
@@ -332,3 +343,37 @@ async def reinit_bot(
         return RedirectResponse("/admin/settings?tab=bot&error=reinit_failed", status_code=303)
 
     return RedirectResponse("/admin/settings?tab=bot&saved=1", status_code=303)
+
+
+@router.post("/blocked/add", response_class=RedirectResponse, response_model=None)
+async def block_user(
+    username: str = Form(""),
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    """Add a Telegram username to the blocked list."""
+    raw = username.strip().lstrip("@")
+    if not raw:
+        return RedirectResponse("/admin/settings?tab=blocked&block_error=empty", status_code=303)
+
+    entry = await add_blocked(session, raw)
+    if entry is None:
+        return RedirectResponse(
+            f"/admin/settings?tab=blocked&block_error=already_blocked&u={raw}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/admin/settings?tab=blocked&block_added={entry.username}",
+        status_code=303,
+    )
+
+
+@router.post("/blocked/remove", response_class=RedirectResponse, response_model=None)
+async def unblock_user(
+    username: str = Form(""),
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    """Remove a Telegram username from the blocked list."""
+    await remove_blocked(session, username.strip())
+    return RedirectResponse("/admin/settings?tab=blocked", status_code=303)

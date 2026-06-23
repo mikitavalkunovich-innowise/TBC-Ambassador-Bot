@@ -5,7 +5,7 @@
 
 <!-- Tab navigation -->
 <ul class="nav nav-tabs mb-4" id="settingsTabs">
-  {% for tab_id, tab_label in [('bot','Bot & Channel'), ('media','Media'), ('messages','Messages'), ('limits','Limits'), ('debug','Debug')] %}
+  {% for tab_id, tab_label in [('bot','Bot & Channel'), ('media','Media'), ('messages','Messages'), ('limits','Limits'), ('debug','Debug'), ('blocked','Blocked Users')] %}
   <li class="nav-item">
     <a class="nav-link {% if active_tab == tab_id %}active{% endif %}"
        href="/admin/settings?tab={{ tab_id }}">{{ tab_label }}</a>
@@ -492,6 +492,84 @@
     </div>
   </div>
 
+</div>
+{% endif %}
+
+<!-- BLOCKED USERS TAB -->
+{% if active_tab == 'blocked' %}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">Block a user</div>
+  <div class="card-body">
+
+    {% if block_added %}
+    <div class="alert alert-success py-2">
+      <i class="bi bi-check-circle me-1"></i>@{{ block_added }} has been blocked.
+    </div>
+    {% endif %}
+    {% if block_error == 'empty' %}
+    <div class="alert alert-danger py-2">Please enter a username.</div>
+    {% elif block_error == 'already_blocked' %}
+    <div class="alert alert-warning py-2">@{{ request.query_params.get('u') }} is already blocked.</div>
+    {% endif %}
+
+    <div class="alert alert-secondary py-2 small mb-3">
+      <i class="bi bi-info-circle me-1"></i>
+      Users without a public Telegram username cannot be blocked this way — only @username-based blocking is supported.
+    </div>
+
+    <form method="post" action="/admin/settings/blocked/add" class="d-flex gap-2 align-items-start">
+      <div class="flex-grow-1">
+        <div class="input-group">
+          <span class="input-group-text">@</span>
+          <input type="text" name="username" class="form-control"
+                 placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="form-text">Enter the Telegram username without the @ sign.</div>
+      </div>
+      <button type="submit" class="btn btn-danger">
+        <i class="bi bi-ban me-1"></i>Block
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    Blocked users
+    <span class="badge bg-secondary">{{ blocked_users | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    {% if blocked_users %}
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-3">Username</th>
+          <th>Blocked since</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in blocked_users %}
+        <tr>
+          <td class="ps-3 font-monospace">@{{ u.username }}</td>
+          <td class="text-muted small">{{ u.created_at.strftime('%Y-%m-%d %H:%M UTC') if u.created_at else '—' }}</td>
+          <td class="text-end pe-3">
+            <form method="post" action="/admin/settings/blocked/remove" class="d-inline">
+              <input type="hidden" name="username" value="{{ u.username }}">
+              <button type="submit" class="btn btn-outline-secondary btn-sm"
+                      onclick="return confirm('Unblock @{{ u.username }}?')">
+                <i class="bi bi-unlock me-1"></i>Unblock
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-muted p-3 small">No blocked users.</div>
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 
