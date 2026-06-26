@@ -244,6 +244,7 @@ async def save_media(
     card_promo_enabled: str = Form("0"),
     card_promo_order_url: str = Form(""),
     card_promo_tariff_url: str = Form(""),
+    card_promo_tariff_url_uz: str = Form(""),
     ambassador_photo: UploadFile | None = File(None),
     card_promo_image: UploadFile | None = File(None),
     video_file_ru: UploadFile | None = File(None),
@@ -262,6 +263,8 @@ async def save_media(
         updates["card_promo_order_url"] = card_promo_order_url.strip()
     if card_promo_tariff_url.strip():
         updates["card_promo_tariff_url"] = card_promo_tariff_url.strip()
+    if card_promo_tariff_url_uz.strip():
+        updates["card_promo_tariff_url_uz"] = card_promo_tariff_url_uz.strip()
 
     if video_url_ru.strip():
         updates["video_url_ru"] = video_url_ru.strip()

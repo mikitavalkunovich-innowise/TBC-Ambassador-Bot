@@ -212,9 +212,12 @@
           <label class="form-label fw-semibold">Order Button URL</label>
           <input type="url" name="card_promo_order_url" class="form-control"
                  value="{{ s.get('card_promo_order_url', '') }}" placeholder="https://app.tbcbank.uz/...">
-          <label class="form-label fw-semibold mt-3">Tariff PDF URL (for {tariff_link} in caption)</label>
+          <label class="form-label fw-semibold mt-3">Tariff PDF URL — Russian (for {tariff_link} in caption)</label>
           <input type="url" name="card_promo_tariff_url" class="form-control"
                  value="{{ s.get('card_promo_tariff_url', '') }}" placeholder="https://...">
+          <label class="form-label fw-semibold mt-3">Tariff PDF URL — Uzbek (for {tariff_link} in caption)</label>
+          <input type="url" name="card_promo_tariff_url_uz" class="form-control"
+                 value="{{ s.get('card_promo_tariff_url_uz', '') }}" placeholder="https://...">
         </div>
 
         <!-- ─── Instagram Frame Templates ─── -->

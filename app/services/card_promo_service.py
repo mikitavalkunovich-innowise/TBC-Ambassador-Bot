@@ -60,6 +60,15 @@ def format_tariff_link(tariff_url: str, lang: str) -> str:
     return f'<a href="{tariff_url}">{label}</a>'
 
 
+async def get_tariff_url_for_lang(session: AsyncSession, lang: str) -> str:
+    """Return the tariff PDF URL for the given promo language."""
+    if lang == "uz":
+        uz_url = await settings_service.get(session, "card_promo_tariff_url_uz") or ""
+        if uz_url:
+            return uz_url
+    return await settings_service.get(session, "card_promo_tariff_url") or ""
+
+
 def resolve_card_promo_image_path(image_path_rel: str | None) -> Path | None:
     """Return the first existing path for the card promo image."""
     if image_path_rel:
@@ -118,7 +127,7 @@ async def send_card_promo_to_user(
     if not caption_raw:
         return None
 
-    tariff_url = await settings_service.get(session, "card_promo_tariff_url") or ""
+    tariff_url = await get_tariff_url_for_lang(session, lang)
     caption = caption_raw.replace("{tariff_link}", format_tariff_link(tariff_url, lang))
 
     order_url = await settings_service.get(session, "card_promo_order_url") or ""

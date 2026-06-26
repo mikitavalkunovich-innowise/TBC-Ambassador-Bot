@@ -33,6 +33,10 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "https://minio.tbcbank.uz/prod-tbcbankuz-new/uploads/"
         "TBC_Debit_Card_Visa_Tariff_04062025_RUS_c7e51f3607.pdf"
     ),
+    "card_promo_tariff_url_uz": (
+        "https://minio.tbcbank.uz/prod-tbcbankuz-new/uploads/"
+        "TBC_Debit_Card_Visa_Tariff_04062025_RUS_c7e51f3607.pdf"
+    ),
     "card_promo_image_path": "card_promo/card_promo.webp",
     # Limits
     "max_regeneration_attempts": "3",
