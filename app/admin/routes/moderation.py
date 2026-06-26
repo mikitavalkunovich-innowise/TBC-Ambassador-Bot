@@ -176,6 +176,12 @@ async def _notify_user_approved(image: GeneratedImage, user: User, session: Asyn
         if not sent_photo:
             await bot.send_message(chat_id=user.telegram_id, text=approved_text)
 
+        try:
+            from app.bot.handlers.media import send_card_promo_after_result
+            await send_card_promo_after_result(bot, user.telegram_id, user, session)
+        except Exception:
+            logger.exception("Failed to send card promo to user %d", user.telegram_id)
+
         # Optionally send the bonus Eldor video after the approved image
         video_enabled = await settings_service.get(session, "video_enabled") == "1"
         if video_enabled:

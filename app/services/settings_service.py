@@ -26,6 +26,13 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "channel_check_enabled": "1",        # "1" = enabled, "0" = disabled
     "privacy_policy_link_enabled": "0",  # show "Read policy" URL button on disclaimer screen
     "video_enabled": "0",                # show bonus Eldor video after approved result
+    "card_promo_enabled": "1",           # show TBC Salom Visa promo after approved result
+    "card_promo_order_url": "https://app.tbcbank.uz/SfqR/hzztbuhk",
+    "card_promo_tariff_url": (
+        "https://minio.tbcbank.uz/prod-tbcbankuz-new/uploads/"
+        "TBC_Debit_Card_Visa_Tariff_04062025_RUS_c7e51f3607.pdf"
+    ),
+    "card_promo_image_path": "card_promo/card_promo.webp",
     # Limits
     "max_regeneration_attempts": "3",
     "budget_limit_usd": "100.00",
@@ -137,6 +144,18 @@ DEFAULT_SETTINGS: dict[str, str] = {
     ),
     "msg_pending_review_ru": "✅ Ваше фото отправлено на проверку. Мы уведомим вас о результате.",
     "msg_approved_ru": "🎉 Ваше фото одобрено! Вот ваш результат:",
+    "msg_card_promo_ru": (
+        "Кстати, у нас есть лимитированная карта TBC Salom Visa с автографом Элдора. "
+        "И вот почему её стоит заказать прямо сейчас:\n\n"
+        "⚽️ кешбэк 1% на все покупки;\n"
+        "⚽️ кешбэк 5% у партнёров. Например, в KFC и Яндекс Go;\n"
+        "⚽️ переводы без комиссии;\n"
+        "⚽️ и ещё много всего!\n\n"
+        "Оформляется за пару минут прямо в приложении, выпуск стоит 30 000 сумов. "
+        "Карту доставим домой бесплатно за три дня.\n\n"
+        "Количество карт ограничено. {tariff_link}"
+    ),
+    "btn_card_promo_ru": "Заказать карту",
     "msg_regenerate_prompt_ru": "Хотите сгенерировать новое фото? Нажмите кнопку ниже.",
     "msg_regenerate_2left_ru": "Хотите попробовать ещё раз? У вас осталось две попытки.",
     "msg_regenerate_1left_ru": "Хотите попробовать ещё раз? У вас осталась одна попытка.",
@@ -189,6 +208,18 @@ DEFAULT_SETTINGS: dict[str, str] = {
     ),
     "msg_pending_review_uz": "✅ Rasmingiz tekshirish uchun yuborildi. Natija haqida xabardor qilamiz.",
     "msg_approved_uz": "🎉 Rasmingiz tasdiqlandi! Mana natija:",
+    "msg_card_promo_uz": (
+        "Aytgancha, bizda Eldorning imzosi tushirilgan cheklangan seriyadagi TBC Salom Visa kartasi bor. "
+        "Nega aynan hozir buyurtma berish kerak?\n\n"
+        "⚽️ barcha xaridlar uchun 1% keshbek;\n"
+        "⚽️ hamkorlarda 5% keshbek. Masalan: KFC va Yandex Go;\n"
+        "⚽️ komissiyasiz pul o'tkazmalari;\n"
+        "⚽️ va yana ko'plab foydali imkoniyatlar!\n\n"
+        "Kartani ilovada bir necha daqiqada ochsa bo'ladi. Chiqarish narxi 30 000 so'm. "
+        "3 kun ichida uyingizgacha bepul yetkazib beramiz.\n\n"
+        "Kartalar soni cheklangan! {tariff_link}"
+    ),
+    "btn_card_promo_uz": "Kartaga buyurtma berish",
     "msg_regenerate_prompt_uz": "Yangi rasm yaratishni xohlaysizmi? Quyidagi tugmani bosing.",
     "msg_regenerate_2left_uz": "Yana bitta rasm olasizmi? Sizda yana 2 ta imkoniyat bor.",
     "msg_regenerate_1left_uz": "Yana bitta rasm olasizmi? Sizda yana 1 ta imkoniyat bor.",

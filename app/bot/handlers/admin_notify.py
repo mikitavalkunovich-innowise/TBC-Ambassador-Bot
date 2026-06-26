@@ -134,6 +134,12 @@ async def handle_approve(
 
     lang = user.language.value if user.language else "ru"
 
+    try:
+        from app.bot.handlers.media import send_card_promo_after_result
+        await send_card_promo_after_result(bot, user.telegram_id, user, session)
+    except Exception:
+        logger.exception("Failed to send card promo to user %d", user.telegram_id)
+
     # Optionally send the bonus Eldor video after the approved image
     video_enabled = await settings_service.get(session, "video_enabled") == "1"
     if video_enabled:

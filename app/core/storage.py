@@ -15,6 +15,7 @@ SUBDIRS = {
     "user_photos": "user_photos",
     "frames": "frames",
     "debug": "debug",
+    "card_promo": "card_promo",
 }
 
 

@@ -30,6 +30,8 @@ MESSAGE_LABELS: dict[str, str] = {
     "msg_regen_ask_extra_photos": "Regen step 1b — request extra angle photos",
     "btn_extra_photo_done": "Extra photos — Done button label",
     "btn_extra_photo_skip": "Extra photos — Skip button label",
+    "msg_card_promo": "Card promo — caption after approved photo (use {tariff_link})",
+    "btn_card_promo": "Card promo — order button label",
 }
 
 # All message keys managed on the Messages tab
@@ -49,6 +51,8 @@ MESSAGE_KEYS = [
     "msg_generating",
     "msg_pending_review",
     "msg_approved",
+    "msg_card_promo",
+    "btn_card_promo",
     "msg_video",                    # bonus video after approval
     "msg_regenerate_2left",         # «Generate new» offer when 2 attempts remain
     "msg_regenerate_1left",         # «Generate new» offer when 1 attempt remains
@@ -237,7 +241,11 @@ async def save_media(
     video_url_ru: str = Form(""),
     video_url_uz: str = Form(""),
     video_enabled: str = Form("0"),
+    card_promo_enabled: str = Form("0"),
+    card_promo_order_url: str = Form(""),
+    card_promo_tariff_url: str = Form(""),
     ambassador_photo: UploadFile | None = File(None),
+    card_promo_image: UploadFile | None = File(None),
     video_file_ru: UploadFile | None = File(None),
     video_file_uz: UploadFile | None = File(None),
     frame_ru: UploadFile | None = File(None),
@@ -247,7 +255,13 @@ async def save_media(
 ) -> RedirectResponse:
     updates: dict[str, str] = {
         "video_enabled": "1" if video_enabled == "1" else "0",
+        "card_promo_enabled": "1" if card_promo_enabled == "1" else "0",
     }
+
+    if card_promo_order_url.strip():
+        updates["card_promo_order_url"] = card_promo_order_url.strip()
+    if card_promo_tariff_url.strip():
+        updates["card_promo_tariff_url"] = card_promo_tariff_url.strip()
 
     if video_url_ru.strip():
         updates["video_url_ru"] = video_url_ru.strip()
@@ -260,6 +274,13 @@ async def save_media(
             fn = generate_filename(ambassador_photo.filename)
             rel = await save_upload(data, "ambassador", fn)
             updates["ambassador_photo_path"] = rel
+
+    if card_promo_image and card_promo_image.filename:
+        data = await card_promo_image.read()
+        if data:
+            fn = generate_filename(card_promo_image.filename)
+            rel = await save_upload(data, "card_promo", fn)
+            updates["card_promo_image_path"] = rel
 
     if video_file_ru and video_file_ru.filename:
         data = await video_file_ru.read()

@@ -69,6 +69,13 @@ def skip_keyboard(lang: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def card_promo_keyboard(order_url: str, button_label: str) -> InlineKeyboardMarkup:
+    """URL button for the TBC Salom Visa card order link."""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=button_label, url=order_url))
+    return builder.as_markup()
+
+
 def share_bot_keyboard(lang: str, bot_username: str) -> InlineKeyboardMarkup:
     """Button to share the bot with friends (shown after attempts exhausted)."""
     label = "Поделиться ботом" if lang == "ru" else "Botni ulashish"

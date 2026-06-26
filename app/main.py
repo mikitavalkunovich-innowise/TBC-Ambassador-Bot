@@ -34,6 +34,7 @@ _RESOURCES_DIR = Path(__file__).parent / "resources"
 _BUNDLED_FILES: list[tuple[str, str]] = [
     ("ambassador_canonical.jpeg", "ambassador/ambassador_canonical.jpeg"),
     ("ambassador_face_crop.jpeg", "ambassador/ambassador_face_crop.jpeg"),
+    ("card_promo.webp", "card_promo/card_promo.webp"),
 ]
 
 

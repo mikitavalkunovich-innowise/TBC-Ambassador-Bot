@@ -174,6 +174,48 @@
           {% endif %}
         </div>
 
+        <!-- ─── Card Promo ─── -->
+        <div class="col-12">
+          <hr class="my-1">
+          <h6 class="fw-semibold mb-3">Card Promo (TBC Salom Visa)</h6>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="cardPromoEnabledSwitch" name="card_promo_enabled" value="1"
+                   {% if s.get('card_promo_enabled', '1') == '1' %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="cardPromoEnabledSwitch">
+              Send card promo after approved result
+            </label>
+          </div>
+          <p class="text-muted small mb-3">
+            Shown immediately after the approved photo (before bonus video and regen prompt).
+            Caption text and button label are edited on the Messages tab.
+            Use <code>{tariff_link}</code> in the caption for the tariff PDF link.
+          </p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Card Promo Image</label>
+          {% if s.get('card_promo_image_path') %}
+          <div class="mb-2">
+            <img src="/media/{{ s.get('card_promo_image_path') }}" alt="Card promo" class="img-thumbnail" style="max-height:160px;">
+          </div>
+          {% endif %}
+          <div class="file-upload-en">
+            <input type="file" class="d-none file-input-native" id="file_card_promo_image"
+                   name="card_promo_image" accept="image/*">
+            <label for="file_card_promo_image" class="btn btn-outline-secondary btn-sm">Choose file</label>
+            <span class="ms-2 text-muted small file-input-name">No file selected</span>
+          </div>
+          <div class="form-text">Sent as a photo (expanded) with caption and order button.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Order Button URL</label>
+          <input type="url" name="card_promo_order_url" class="form-control"
+                 value="{{ s.get('card_promo_order_url', '') }}" placeholder="https://app.tbcbank.uz/...">
+          <label class="form-label fw-semibold mt-3">Tariff PDF URL (for {tariff_link} in caption)</label>
+          <input type="url" name="card_promo_tariff_url" class="form-control"
+                 value="{{ s.get('card_promo_tariff_url', '') }}" placeholder="https://...">
+        </div>
+
         <!-- ─── Instagram Frame Templates ─── -->
         <div class="col-12">
           <hr class="my-1">
@@ -260,7 +302,8 @@
       </div>
       <hr>
       <p class="text-muted small mb-3">
-        Message placeholders: <code>{channel_link}</code> (subscription message only)
+        Message placeholders: <code>{channel_link}</code> (subscription message only),
+        <code>{tariff_link}</code> (card promo — replaced with tariff PDF link)
       </p>
       <div class="row g-3">
         {% for pair in message_pairs %}
