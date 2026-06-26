@@ -46,6 +46,10 @@ class User(Base, TimestampMixin):
         nullable=False,
     )
     regenerations_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    bot_blocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     # FSM state persistence (aiogram MemoryStorage fallback)
     fsm_state: Mapped[str | None] = mapped_column(String(255), nullable=True)

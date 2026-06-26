@@ -18,8 +18,9 @@ from app.bot.keyboards.builders import language_keyboard
 from app.bot.states import UserFlow
 from app.models.user import FlowStatus, User
 from app.services import settings_service
-from app.services.analytics_service import track_event
 from app.models.event import EventType
+from app.services.analytics_service import track_event
+from app.services.card_promo_service import clear_user_bot_blocked
 
 router = Router(name="start")
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ async def handle_start(message: Message, state: FSMContext, session: AsyncSessio
     user = result.scalar_one_or_none()
 
     if user is not None:
-        # Resume existing user
+        await clear_user_bot_blocked(session, user)
         await _resume_user(message, user, state, session)
         return
 

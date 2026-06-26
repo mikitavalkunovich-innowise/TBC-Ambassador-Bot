@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.types import FSInputFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -25,6 +26,10 @@ _RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources"
 _BUNDLED_CARD_PROMO = _RESOURCES_DIR / "card_promo.webp"
 
 _BROADCAST_DELAY_SEC = 0.04  # ~25 messages/sec
+
+
+class UserBlockedBotError(Exception):
+    """Raised when Telegram reports the user has blocked the bot."""
 
 
 @dataclass
@@ -158,11 +163,39 @@ async def send_card_promo_to_user(
             caption=caption,
             reply_markup=card_promo_keyboard(button_url, button_label),
         )
+    except TelegramForbiddenError:
+        await session.delete(delivery)
+        await mark_user_bot_blocked(session, user.id)
+        await session.flush()
+        raise UserBlockedBotError from None
     except Exception:
         await session.delete(delivery)
         await session.flush()
         raise
     return delivery
+
+
+async def mark_user_bot_blocked(session: AsyncSession, user_id: int) -> None:
+    """Record that the user blocked the bot (idempotent)."""
+    db_user = await session.get(User, user_id)
+    if db_user is not None and db_user.bot_blocked_at is None:
+        db_user.bot_blocked_at = datetime.now(timezone.utc)
+        await session.flush()
+
+
+async def clear_user_bot_blocked(session: AsyncSession, user: User) -> None:
+    """Clear bot block flag when the user returns via /start."""
+    if user.bot_blocked_at is not None:
+        user.bot_blocked_at = None
+        await session.flush()
+
+
+async def count_bot_blocked_users(session: AsyncSession) -> int:
+    """Count users who blocked the bot in Telegram."""
+    result = await session.execute(
+        select(func.count(User.id)).where(User.bot_blocked_at.isnot(None))
+    )
+    return result.scalar_one()
 
 
 async def record_click(session: AsyncSession, delivery_id: str) -> None:
@@ -253,13 +286,17 @@ async def send_card_promo_test(
     if await settings_service.get(session, "card_promo_enabled") != "1":
         raise ValueError("promo_disabled")
 
-    delivery = await send_card_promo_to_user(
-        bot,
-        user,
-        session,
-        source=CardPromoSource.TEST,
-        language_override=language,
-    )
+    try:
+        delivery = await send_card_promo_to_user(
+            bot,
+            user,
+            session,
+            source=CardPromoSource.TEST,
+            language_override=language,
+        )
+    except UserBlockedBotError:
+        await session.commit()
+        raise ValueError("user_blocked_bot") from None
     if delivery is None:
         raise ValueError("promo_not_configured")
     return delivery
@@ -299,6 +336,8 @@ async def get_broadcast_recipients(
     result = await session.execute(select(User).where(User.language == lang_enum))
     users: list[User] = []
     for user in result.scalars().all():
+        if user.bot_blocked_at is not None:
+            continue
         if _is_user_blocked(user, blocked):
             continue
         if missed_only and user.id in delivered:
@@ -334,6 +373,7 @@ async def broadcast_card_promo(
     """
     sent = 0
     failed = 0
+    blocked = 0
     skipped = 0
 
     async with session_factory() as session:
@@ -342,12 +382,21 @@ async def broadcast_card_promo(
     for user in users:
         try:
             async with session_factory() as session:
-                delivery = await send_card_promo_to_user(
-                    bot,
-                    user,
-                    session,
-                    source=CardPromoSource.BROADCAST,
-                )
+                try:
+                    delivery = await send_card_promo_to_user(
+                        bot,
+                        user,
+                        session,
+                        source=CardPromoSource.BROADCAST,
+                    )
+                except UserBlockedBotError:
+                    await session.commit()
+                    blocked += 1
+                    logger.warning(
+                        "User blocked bot during card promo broadcast, telegram_id=%d",
+                        user.telegram_id,
+                    )
+                    continue
                 if delivery is None:
                     skipped += 1
                 else:
@@ -364,10 +413,11 @@ async def broadcast_card_promo(
 
     mode = "missed-only" if missed_only else "all"
     logger.info(
-        "Card promo broadcast (%s, %s) finished: sent=%d failed=%d skipped=%d",
+        "Card promo broadcast (%s, %s) finished: sent=%d blocked=%d failed=%d skipped=%d",
         language,
         mode,
         sent,
+        blocked,
         failed,
         skipped,
     )

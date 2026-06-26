@@ -11,7 +11,10 @@ from app.core.storage import get_absolute_path
 from app.models.card_promo_delivery import CardPromoSource
 from app.models.user import User
 from app.services import settings_service
-from app.services.card_promo_service import send_card_promo_to_user
+from app.services.card_promo_service import (
+    UserBlockedBotError,
+    send_card_promo_to_user,
+)
 
 router = Router(name="media")
 logger = logging.getLogger(__name__)
@@ -25,12 +28,17 @@ async def send_card_promo_after_result(
 ) -> None:
     """Send the TBC Salom Visa card promo after an approved photo (normal bot flow)."""
     try:
-        await send_card_promo_to_user(
+        delivery = await send_card_promo_to_user(
             bot,
             user,
             session,
             source=CardPromoSource.FLOW,
         )
+        if delivery is not None:
+            await session.commit()
+    except UserBlockedBotError:
+        await session.commit()
+        logger.warning("User blocked bot, card promo not sent, telegram_id=%d", chat_id)
     except Exception:
         logger.exception("Failed to send card promo to user %d", chat_id)
 

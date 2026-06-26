@@ -12,6 +12,7 @@ from app.core.database import async_session_factory, get_db_session
 from app.services import settings_service
 from app.services.card_promo_service import (
     broadcast_card_promo,
+    count_bot_blocked_users,
     count_broadcast_recipients,
     get_recent_deliveries,
     get_stats,
@@ -32,6 +33,7 @@ async def promo_page(
 ) -> HTMLResponse:
     stats = await get_stats(session)
     recent = await get_recent_deliveries(session, limit=50)
+    bot_blocked_count = await count_bot_blocked_users(session)
     ru_count = await count_broadcast_recipients(session, "ru")
     uz_count = await count_broadcast_recipients(session, "uz")
     ru_missed_count = await count_broadcast_recipients(session, "ru", missed_only=True)
@@ -57,6 +59,7 @@ async def promo_page(
             "active_page": "promo",
             "stats": stats,
             "recent": recent,
+            "bot_blocked_count": bot_blocked_count,
             "ru_count": ru_count,
             "uz_count": uz_count,
             "ru_missed_count": ru_missed_count,

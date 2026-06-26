@@ -69,6 +69,8 @@
   Bot is not initialized. Cannot send test.
   {% elif test_error == 'send_failed' %}
   Failed to send test promo to Telegram ID <strong>{{ test_telegram_id }}</strong>. Check server logs.
+  {% elif test_error == 'user_blocked_bot' %}
+  User with Telegram ID <strong>{{ test_telegram_id }}</strong> has blocked the bot in Telegram.
   {% else %}
   Test send failed: {{ test_error }}
   {% endif %}
@@ -96,7 +98,7 @@
 
 <div class="row g-4 mb-4">
   <!-- Stats cards -->
-  <div class="col-md-4">
+  <div class="col-md-6 col-lg-3">
     <div class="card stat-card primary h-100">
       <div class="card-body">
         <div class="text-muted small">Total sent</div>
@@ -107,7 +109,7 @@
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-6 col-lg-3">
     <div class="card stat-card success h-100">
       <div class="card-body">
         <div class="text-muted small">Total clicked «Order card»</div>
@@ -123,7 +125,7 @@
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-6 col-lg-3">
     <div class="card stat-card warning h-100">
       <div class="card-body">
         <div class="text-muted small">Click-through rate (total)</div>
@@ -136,6 +138,17 @@
         <div class="fs-3 fw-bold text-muted">—</div>
         <div class="small text-muted mt-1">Tracking disabled</div>
         {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card stat-card h-100" style="border-left: 4px solid #6c757d;">
+      <div class="card-body">
+        <div class="text-muted small">Blocked bot</div>
+        <div class="fs-3 fw-bold">{{ bot_blocked_count }}</div>
+        <div class="small text-muted mt-1">
+          Excluded from broadcast and missed counts. Cleared when user sends /start again.
+        </div>
       </div>
     </div>
   </div>
@@ -190,7 +203,7 @@
       <div class="card-body">
         <p class="text-muted small">
           Sends the same card promo message (photo + caption + button) as in the normal bot flow.
-          Recipients: all users with the selected language. Blocked users are excluded.
+          Recipients: all users with the selected language. Admin-blocked and bot-blocked users are excluded.
           Edit text, image, and URLs in <a href="/admin/settings?tab=media">Settings → Media</a>.
           Enable or disable all promo sending there.
         </p>
