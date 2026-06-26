@@ -26,7 +26,11 @@
 {% if broadcast_started %}
 <div class="alert alert-info py-2">
   <i class="bi bi-broadcast me-1"></i>
+  {% if broadcast_missed %}
+  Missed-only broadcast to <strong>{% if broadcast_lang == 'ru' %}Russian{% else %}Uzbek{% endif %}</strong> users started in the background.
+  {% else %}
   Broadcast to <strong>{% if broadcast_lang == 'ru' %}Russian{% else %}Uzbek{% endif %}</strong> users started in the background.
+  {% endif %}
   Refresh this page in a minute to see updated statistics.
 </div>
 {% endif %}
@@ -190,7 +194,7 @@
           Edit text, image, and URLs in <a href="/admin/settings?tab=media">Settings → Media</a>.
           Enable or disable all promo sending there.
         </p>
-        <div class="d-flex flex-wrap gap-2">
+        <div class="d-flex flex-wrap gap-2 mb-2">
           <form method="post" action="/admin/promo/broadcast/ru"
                 onsubmit="return confirm('Send card promo to {{ ru_count }} Russian users?');">
             <button type="submit" class="btn btn-primary" {% if not promo_enabled %}disabled{% endif %}>
@@ -204,8 +208,23 @@
             </button>
           </form>
         </div>
+        <div class="d-flex flex-wrap gap-2">
+          <form method="post" action="/admin/promo/broadcast/missed/ru"
+                onsubmit="return confirm('Send card promo to {{ ru_missed_count }} Russian users who have not received it yet?');">
+            <button type="submit" class="btn btn-outline-primary" {% if not promo_enabled %}disabled{% endif %}>
+              <i class="bi bi-send-plus me-1"></i>Send to missed Russian ({{ ru_missed_count }})
+            </button>
+          </form>
+          <form method="post" action="/admin/promo/broadcast/missed/uz"
+                onsubmit="return confirm('Send card promo to {{ uz_missed_count }} Uzbek users who have not received it yet?');">
+            <button type="submit" class="btn btn-outline-primary" {% if not promo_enabled %}disabled{% endif %}>
+              <i class="bi bi-send-plus me-1"></i>Send to missed Uzbek ({{ uz_missed_count }})
+            </button>
+          </form>
+        </div>
         <div class="form-text mt-2">
-          Runs in the background (~25 msg/sec). The bot keeps working for other users.
+          «Missed» skips users who already have a promo delivery recorded for that language (flow, broadcast, or test).
+          Runs in the background (~25 msg/sec).
         </div>
       </div>
     </div>

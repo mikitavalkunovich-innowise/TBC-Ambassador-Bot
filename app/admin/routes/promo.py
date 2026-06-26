@@ -34,6 +34,8 @@ async def promo_page(
     recent = await get_recent_deliveries(session, limit=50)
     ru_count = await count_broadcast_recipients(session, "ru")
     uz_count = await count_broadcast_recipients(session, "uz")
+    ru_missed_count = await count_broadcast_recipients(session, "ru", missed_only=True)
+    uz_missed_count = await count_broadcast_recipients(session, "uz", missed_only=True)
 
     image_path_rel = await settings_service.get(session, "card_promo_image_path")
     image_path = resolve_card_promo_image_path(image_path_rel)
@@ -57,6 +59,8 @@ async def promo_page(
             "recent": recent,
             "ru_count": ru_count,
             "uz_count": uz_count,
+            "ru_missed_count": ru_missed_count,
+            "uz_missed_count": uz_missed_count,
             "preview_image_url": preview_image_url,
             "caption_ru": caption_ru,
             "caption_uz": caption_uz,
@@ -64,6 +68,7 @@ async def promo_page(
             "click_tracking_enabled": click_tracking_enabled,
             "broadcast_started": request.query_params.get("broadcast_started"),
             "broadcast_lang": request.query_params.get("lang"),
+            "broadcast_missed": request.query_params.get("missed"),
             "test_sent": request.query_params.get("test_sent"),
             "test_lang": request.query_params.get("test_lang"),
             "test_telegram_id": request.query_params.get("telegram_id", ""),
@@ -91,6 +96,8 @@ async def _start_broadcast(
     request: Request,
     session: AsyncSession,
     language: str,
+    *,
+    missed_only: bool = False,
 ) -> RedirectResponse:
     """Launch background broadcast task and redirect immediately."""
     if await settings_service.get(session, "card_promo_enabled") != "1":
@@ -101,11 +108,18 @@ async def _start_broadcast(
         return RedirectResponse("/admin/promo?error=no_bot", status_code=303)
 
     asyncio.create_task(
-        broadcast_card_promo(async_session_factory, bot, language)
+        broadcast_card_promo(
+            async_session_factory,
+            bot,
+            language,
+            missed_only=missed_only,
+        )
     )
-    logger.info("Card promo broadcast (%s) task started", language)
+    mode = "missed-only" if missed_only else "all"
+    logger.info("Card promo broadcast (%s, %s) task started", language, mode)
+    missed_param = "&missed=1" if missed_only else ""
     return RedirectResponse(
-        f"/admin/promo?broadcast_started=1&lang={language}",
+        f"/admin/promo?broadcast_started=1&lang={language}{missed_param}",
         status_code=303,
     )
 
@@ -126,6 +140,24 @@ async def broadcast_uz(
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
     return await _start_broadcast(request, session, "uz")
+
+
+@router.post("/broadcast/missed/ru", response_model=None)
+async def broadcast_missed_ru(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    return await _start_broadcast(request, session, "ru", missed_only=True)
+
+
+@router.post("/broadcast/missed/uz", response_model=None)
+async def broadcast_missed_uz(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+) -> RedirectResponse:
+    return await _start_broadcast(request, session, "uz", missed_only=True)
 
 
 def _test_redirect(

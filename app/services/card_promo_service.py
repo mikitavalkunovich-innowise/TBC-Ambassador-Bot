@@ -265,49 +265,81 @@ async def send_card_promo_test(
     return delivery
 
 
-async def count_broadcast_recipients(session: AsyncSession, language: str) -> int:
-    """Count users eligible for a language-specific broadcast."""
+def _is_user_blocked(user: User, blocked: set[str]) -> bool:
+    if not user.telegram_username:
+        return False
+    normalized = user.telegram_username.lower().lstrip("@")
+    return normalized in blocked
+
+
+async def _delivered_user_ids_for_language(
+    session: AsyncSession,
+    language: str,
+) -> set[int]:
+    """User IDs who already received a card promo in the given language."""
+    result = await session.execute(
+        select(CardPromoDelivery.user_id).where(
+            CardPromoDelivery.language == language,
+        )
+    )
+    return {row[0] for row in result.all()}
+
+
+async def get_broadcast_recipients(
+    session: AsyncSession,
+    language: str,
+    *,
+    missed_only: bool = False,
+) -> list[User]:
+    """Return users eligible for a language-specific broadcast."""
     lang_enum = Language.RU if language == "ru" else Language.UZ
     blocked = await _blocked_usernames(session)
-    result = await session.execute(
-        select(User).where(User.language == lang_enum)
-    )
-    users = result.scalars().all()
-    return sum(
-        1 for u in users
-        if not u.telegram_username or u.telegram_username.lower().lstrip("@") not in blocked
-    )
+    delivered = await _delivered_user_ids_for_language(session, language) if missed_only else set()
+
+    result = await session.execute(select(User).where(User.language == lang_enum))
+    users: list[User] = []
+    for user in result.scalars().all():
+        if _is_user_blocked(user, blocked):
+            continue
+        if missed_only and user.id in delivered:
+            continue
+        users.append(user)
+    return users
+
+
+async def count_broadcast_recipients(
+    session: AsyncSession,
+    language: str,
+    *,
+    missed_only: bool = False,
+) -> int:
+    """Count users eligible for a language-specific broadcast."""
+    return len(await get_broadcast_recipients(session, language, missed_only=missed_only))
 
 
 async def broadcast_card_promo(
     session_factory: async_sessionmaker[AsyncSession],
     bot: Bot,
     language: str,
+    *,
+    missed_only: bool = False,
 ) -> None:
     """
-    Send card promo to all users with the given language in the background.
+    Send card promo to users with the given language in the background.
+
+    When missed_only is True, skips users who already have any card promo delivery
+    recorded for that language (flow, broadcast, or test).
 
     Uses its own DB sessions per batch; does not touch user FSM state.
     """
-    lang_enum = Language.RU if language == "ru" else Language.UZ
     sent = 0
     failed = 0
     skipped = 0
 
     async with session_factory() as session:
-        blocked = await _blocked_usernames(session)
-        result = await session.execute(
-            select(User).where(User.language == lang_enum)
-        )
-        users = list(result.scalars().all())
+        users = await get_broadcast_recipients(session, language, missed_only=missed_only)
 
     for user in users:
-        if user.telegram_username:
-            normalized = user.telegram_username.lower().lstrip("@")
-            if normalized in blocked:
-                skipped += 1
-                continue
-
         try:
             async with session_factory() as session:
                 delivery = await send_card_promo_to_user(
@@ -330,9 +362,11 @@ async def broadcast_card_promo(
 
         await asyncio.sleep(_BROADCAST_DELAY_SEC)
 
+    mode = "missed-only" if missed_only else "all"
     logger.info(
-        "Card promo broadcast (%s) finished: sent=%d failed=%d skipped=%d",
+        "Card promo broadcast (%s, %s) finished: sent=%d failed=%d skipped=%d",
         language,
+        mode,
         sent,
         failed,
         skipped,
