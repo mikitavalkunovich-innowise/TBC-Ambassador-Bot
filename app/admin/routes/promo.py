@@ -44,6 +44,9 @@ async def promo_page(
     caption_ru = await settings_service.get_text(session, "msg_card_promo", "ru")
     caption_uz = await settings_service.get_text(session, "msg_card_promo", "uz")
     promo_enabled = await settings_service.get(session, "card_promo_enabled") == "1"
+    click_tracking_enabled = (
+        await settings_service.get(session, "card_promo_click_tracking_enabled", "1") == "1"
+    )
 
     return templates.TemplateResponse(
         "promo.html",
@@ -58,18 +61,41 @@ async def promo_page(
             "caption_ru": caption_ru,
             "caption_uz": caption_uz,
             "promo_enabled": promo_enabled,
+            "click_tracking_enabled": click_tracking_enabled,
             "broadcast_started": request.query_params.get("broadcast_started"),
             "broadcast_lang": request.query_params.get("lang"),
             "test_sent": request.query_params.get("test_sent"),
             "test_lang": request.query_params.get("test_lang"),
             "test_telegram_id": request.query_params.get("telegram_id", ""),
             "test_error": request.query_params.get("test_error"),
+            "settings_saved": request.query_params.get("settings_saved"),
         },
     )
 
 
-def _start_broadcast(request: Request, language: str) -> RedirectResponse:
+@router.post("/settings", response_model=None)
+async def promo_settings(
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+    card_promo_click_tracking_enabled: str = Form("0"),
+) -> RedirectResponse:
+    await settings_service.set(
+        session,
+        "card_promo_click_tracking_enabled",
+        "1" if card_promo_click_tracking_enabled == "1" else "0",
+    )
+    return RedirectResponse("/admin/promo?settings_saved=1", status_code=303)
+
+
+async def _start_broadcast(
+    request: Request,
+    session: AsyncSession,
+    language: str,
+) -> RedirectResponse:
     """Launch background broadcast task and redirect immediately."""
+    if await settings_service.get(session, "card_promo_enabled") != "1":
+        return RedirectResponse("/admin/promo?error=promo_disabled", status_code=303)
+
     bot = getattr(request.app.state, "bot", None)
     if bot is None:
         return RedirectResponse("/admin/promo?error=no_bot", status_code=303)
@@ -87,17 +113,19 @@ def _start_broadcast(request: Request, language: str) -> RedirectResponse:
 @router.post("/broadcast/ru", response_model=None)
 async def broadcast_ru(
     request: Request,
+    session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
-    return _start_broadcast(request, "ru")
+    return await _start_broadcast(request, session, "ru")
 
 
 @router.post("/broadcast/uz", response_model=None)
 async def broadcast_uz(
     request: Request,
+    session: AsyncSession = Depends(get_db_session),
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
-    return _start_broadcast(request, "uz")
+    return await _start_broadcast(request, session, "uz")
 
 
 def _test_redirect(
@@ -126,6 +154,9 @@ async def _send_test_promo(
     bot = getattr(request.app.state, "bot", None)
     if bot is None:
         return _test_redirect(telegram_id=telegram_id_raw, test_error="no_bot")
+
+    if await settings_service.get(session, "card_promo_enabled") != "1":
+        return _test_redirect(telegram_id=telegram_id_raw.strip(), test_error="promo_disabled")
 
     raw = telegram_id_raw.strip()
     if not raw:

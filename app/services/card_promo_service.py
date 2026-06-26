@@ -103,7 +103,6 @@ async def send_card_promo_to_user(
     session: AsyncSession,
     *,
     source: str,
-    respect_enabled: bool = True,
     language_override: str | None = None,
 ) -> CardPromoDelivery | None:
     """
@@ -111,7 +110,7 @@ async def send_card_promo_to_user(
 
     Returns the delivery record on success, None if skipped or failed.
     """
-    if respect_enabled and await settings_service.get(session, "card_promo_enabled") != "1":
+    if await settings_service.get(session, "card_promo_enabled") != "1":
         return None
 
     lang = language_override or (user.language.value if user.language else "ru")
@@ -138,14 +137,17 @@ async def send_card_promo_to_user(
         return None
 
     delivery = await create_delivery(session, user.id, source, lang)
-    tracking_url = build_tracking_url(delivery.id)
+    if await settings_service.get(session, "card_promo_click_tracking_enabled", "1") == "1":
+        button_url = build_tracking_url(delivery.id)
+    else:
+        button_url = order_url
 
     try:
         await bot.send_photo(
             chat_id=user.telegram_id,
             photo=FSInputFile(str(image_path)),
             caption=caption,
-            reply_markup=card_promo_keyboard(tracking_url, button_label),
+            reply_markup=card_promo_keyboard(button_url, button_label),
         )
     except Exception:
         await session.delete(delivery)
@@ -239,12 +241,14 @@ async def send_card_promo_test(
     if user is None:
         raise ValueError("user_not_found")
 
+    if await settings_service.get(session, "card_promo_enabled") != "1":
+        raise ValueError("promo_disabled")
+
     delivery = await send_card_promo_to_user(
         bot,
         user,
         session,
         source=CardPromoSource.TEST,
-        respect_enabled=False,
         language_override=language,
     )
     if delivery is None:
@@ -302,7 +306,6 @@ async def broadcast_card_promo(
                     user,
                     session,
                     source=CardPromoSource.BROADCAST,
-                    respect_enabled=False,
                 )
                 if delivery is None:
                     skipped += 1

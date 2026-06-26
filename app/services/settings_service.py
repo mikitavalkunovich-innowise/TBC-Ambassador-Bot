@@ -26,7 +26,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "channel_check_enabled": "1",        # "1" = enabled, "0" = disabled
     "privacy_policy_link_enabled": "0",  # show "Read policy" URL button on disclaimer screen
     "video_enabled": "0",                # show bonus Eldor video after approved result
-    "card_promo_enabled": "1",           # show TBC Salom Visa promo after approved result
+    "card_promo_enabled": "1",           # send card promo in all scenarios (flow, broadcast, test)
+    "card_promo_click_tracking_enabled": "1",  # use redirect URL on order button for click stats
     "card_promo_order_url": "https://app.tbcbank.uz/SfqR/hzztbuhk",
     "card_promo_tariff_url": (
         "https://minio.tbcbank.uz/prod-tbcbankuz-new/uploads/"

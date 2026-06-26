@@ -183,12 +183,13 @@
                    id="cardPromoEnabledSwitch" name="card_promo_enabled" value="1"
                    {% if s.get('card_promo_enabled', '1') == '1' %}checked{% endif %}>
             <label class="form-check-label fw-semibold" for="cardPromoEnabledSwitch">
-              Send card promo after approved result
+              Enable card promo message
             </label>
           </div>
           <p class="text-muted small mb-3">
-            Shown immediately after the approved photo (before bonus video and regen prompt).
-            Caption text and button label are edited on the Messages tab.
+            When enabled, the card promo (photo + caption + order button) is sent after an approved
+            photo, via test send, and via broadcast on the Promo page. When disabled, all of these
+            are skipped. Caption text and button label are edited on the Messages tab.
             Use <code>{tariff_link}</code> in the caption for the tariff PDF link.
           </p>
         </div>

@@ -3,6 +3,26 @@
 {% block content %}
 <h4 class="fw-bold mb-4">Card Promo</h4>
 
+{% if settings_saved %}
+<div class="alert alert-success py-2">
+  <i class="bi bi-check-circle me-1"></i> Promo settings saved.
+</div>
+{% endif %}
+
+{% if not promo_enabled %}
+<div class="alert alert-warning py-2">
+  Card promo is disabled in <a href="/admin/settings?tab=media">Settings → Media</a>.
+  Test send, broadcast, and automatic send after approval are all blocked.
+</div>
+{% endif %}
+
+{% if not click_tracking_enabled %}
+<div class="alert alert-secondary py-2">
+  Click tracking is off — the order button uses the original URL from Settings → Media.
+  Sent counts still update; click statistics will not.
+</div>
+{% endif %}
+
 {% if broadcast_started %}
 <div class="alert alert-info py-2">
   <i class="bi bi-broadcast me-1"></i>
@@ -13,13 +33,19 @@
 
 {% if request.query_params.get('error') == 'no_bot' %}
 <div class="alert alert-danger py-2">Bot is not initialized. Cannot start broadcast.</div>
+{% elif request.query_params.get('error') == 'promo_disabled' %}
+<div class="alert alert-danger py-2">Card promo is disabled. Enable it in Settings → Media first.</div>
 {% endif %}
 
 {% if test_sent %}
 <div class="alert alert-success py-2">
   <i class="bi bi-check-circle me-1"></i>
   Test promo ({% if test_lang == 'ru' %}Russian{% else %}Uzbek{% endif %}) sent to Telegram ID <strong>{{ test_telegram_id }}</strong>.
+  {% if click_tracking_enabled %}
   Check the bot and the table below for click tracking.
+  {% else %}
+  Check the bot — click tracking is currently off.
+  {% endif %}
 </div>
 {% endif %}
 
@@ -31,6 +57,8 @@
   Telegram user ID must be a number.
   {% elif test_error == 'user_not_found' %}
   User with Telegram ID <strong>{{ test_telegram_id }}</strong> not found. They must start the bot at least once.
+  {% elif test_error == 'promo_disabled' %}
+  Card promo is disabled. Enable it in <a href="/admin/settings?tab=media">Settings → Media</a> first.
   {% elif test_error == 'promo_not_configured' %}
   Promo is not fully configured (text, image, or order URL missing). Check Settings → Media.
   {% elif test_error == 'no_bot' %}
@@ -42,6 +70,25 @@
   {% endif %}
 </div>
 {% endif %}
+
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <form method="post" action="/admin/promo/settings" class="d-flex flex-wrap align-items-center gap-3">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch"
+               id="clickTrackingSwitch" name="card_promo_click_tracking_enabled" value="1"
+               {% if click_tracking_enabled %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="clickTrackingSwitch">
+          Track order button clicks
+        </label>
+      </div>
+      <button type="submit" class="btn btn-outline-secondary btn-sm">Save</button>
+      <span class="text-muted small">
+        When on, the button uses a redirect URL to count clicks. When off, the button links directly to the order URL.
+      </span>
+    </form>
+  </div>
+</div>
 
 <div class="row g-4 mb-4">
   <!-- Stats cards -->
@@ -60,10 +107,15 @@
     <div class="card stat-card success h-100">
       <div class="card-body">
         <div class="text-muted small">Total clicked «Order card»</div>
+        {% if click_tracking_enabled %}
         <div class="fs-3 fw-bold">{{ stats.total.clicked }}</div>
         <div class="small text-muted mt-1">
           Flow: {{ stats.flow.clicked }} · Broadcast: {{ stats.broadcast.clicked }}
         </div>
+        {% else %}
+        <div class="fs-3 fw-bold text-muted">—</div>
+        <div class="small text-muted mt-1">Tracking disabled</div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -71,10 +123,15 @@
     <div class="card stat-card warning h-100">
       <div class="card-body">
         <div class="text-muted small">Click-through rate (total)</div>
+        {% if click_tracking_enabled %}
         <div class="fs-3 fw-bold">{{ stats.total.ctr }}%</div>
         <div class="small text-muted mt-1">
           Flow: {{ stats.flow.ctr }}% · Broadcast: {{ stats.broadcast.ctr }}%
         </div>
+        {% else %}
+        <div class="fs-3 fw-bold text-muted">—</div>
+        <div class="small text-muted mt-1">Tracking disabled</div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -99,16 +156,18 @@
                  class="form-control form-control-sm mb-3"
                  placeholder="e.g. 123456789"
                  value="{{ test_telegram_id }}"
-                 required>
+                 {% if not promo_enabled %}disabled{% else %}required{% endif %}>
           <div class="d-flex flex-wrap gap-2">
             <button type="submit"
                     formaction="/admin/promo/test/ru"
-                    class="btn btn-outline-primary btn-sm">
+                    class="btn btn-outline-primary btn-sm"
+                    {% if not promo_enabled %}disabled{% endif %}>
               <i class="bi bi-send me-1"></i>Send test (Russian)
             </button>
             <button type="submit"
                     formaction="/admin/promo/test/uz"
-                    class="btn btn-outline-primary btn-sm">
+                    class="btn btn-outline-primary btn-sm"
+                    {% if not promo_enabled %}disabled{% endif %}>
               <i class="bi bi-send me-1"></i>Send test (Uzbek)
             </button>
           </div>
@@ -129,22 +188,18 @@
           Sends the same card promo message (photo + caption + button) as in the normal bot flow.
           Recipients: all users with the selected language. Blocked users are excluded.
           Edit text, image, and URLs in <a href="/admin/settings?tab=media">Settings → Media</a>.
+          Enable or disable all promo sending there.
         </p>
-        {% if not promo_enabled %}
-        <div class="alert alert-warning py-2 small mb-3">
-          Automatic promo after approval is disabled in Settings, but broadcast still works.
-        </div>
-        {% endif %}
         <div class="d-flex flex-wrap gap-2">
           <form method="post" action="/admin/promo/broadcast/ru"
                 onsubmit="return confirm('Send card promo to {{ ru_count }} Russian users?');">
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" {% if not promo_enabled %}disabled{% endif %}>
               <i class="bi bi-send me-1"></i>Send to Russian ({{ ru_count }})
             </button>
           </form>
           <form method="post" action="/admin/promo/broadcast/uz"
                 onsubmit="return confirm('Send card promo to {{ uz_count }} Uzbek users?');">
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" {% if not promo_enabled %}disabled{% endif %}>
               <i class="bi bi-send me-1"></i>Send to Uzbek ({{ uz_count }})
             </button>
           </form>

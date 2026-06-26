@@ -30,7 +30,6 @@ async def send_card_promo_after_result(
             user,
             session,
             source=CardPromoSource.FLOW,
-            respect_enabled=True,
         )
     except Exception:
         logger.exception("Failed to send card promo to user %d", chat_id)
