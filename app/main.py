@@ -14,7 +14,7 @@ from pathlib import Path
 
 from aiogram.types import Update
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.admin.router import router as admin_router
@@ -163,6 +163,27 @@ async def telegram_webhook(request: Request) -> JSONResponse:
 @app.get("/health")
 async def health() -> JSONResponse:
     return JSONResponse({"status": "ok", "bot_active": app.state.bot is not None})
+
+
+@app.get("/r/card-order/{delivery_id}", response_model=None)
+async def track_card_order_click(delivery_id: str) -> RedirectResponse:
+    """
+    Track order-button clicks and redirect to the bank app URL.
+
+    Public endpoint (no auth). Fail-open: always redirects even if DB fails.
+    """
+    from app.core.database import async_session_factory
+    from app.services.card_promo_service import get_order_redirect_url, record_click
+
+    redirect_url = "https://app.tbcbank.uz/SfqR/hzztbuhk"
+    try:
+        async with async_session_factory() as session:
+            redirect_url = await get_order_redirect_url(session)
+            await record_click(session, delivery_id)
+    except Exception:
+        logger.exception("Failed to record card promo click for delivery_id=%s", delivery_id)
+
+    return RedirectResponse(url=redirect_url, status_code=302)
 
 
 # --- Root redirect ---

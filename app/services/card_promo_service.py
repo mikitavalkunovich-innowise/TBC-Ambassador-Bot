@@ -1,0 +1,282 @@
+"""Card promo delivery, click tracking, broadcast, and statistics."""
+import asyncio
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from aiogram import Bot
+from aiogram.types import FSInputFile
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import selectinload
+
+from app.bot.keyboards.builders import card_promo_keyboard
+from app.core.config import get_settings
+from app.core.storage import get_absolute_path
+from app.models.blocked_user import BlockedUser
+from app.models.card_promo_delivery import CardPromoDelivery, CardPromoSource
+from app.models.user import Language, User
+from app.services import settings_service
+
+logger = logging.getLogger(__name__)
+
+_RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources"
+_BUNDLED_CARD_PROMO = _RESOURCES_DIR / "card_promo.webp"
+
+_BROADCAST_DELAY_SEC = 0.04  # ~25 messages/sec
+
+
+@dataclass
+class SourceStats:
+    sent: int
+    clicked: int
+
+    @property
+    def ctr(self) -> float:
+        if self.sent == 0:
+            return 0.0
+        return round(100.0 * self.clicked / self.sent, 1)
+
+
+@dataclass
+class PromoStats:
+    flow: SourceStats
+    broadcast: SourceStats
+
+    @property
+    def total(self) -> SourceStats:
+        return SourceStats(
+            sent=self.flow.sent + self.broadcast.sent,
+            clicked=self.flow.clicked + self.broadcast.clicked,
+        )
+
+
+def format_tariff_link(tariff_url: str, lang: str) -> str:
+    """Build an HTML anchor for the tariff PDF link."""
+    if not tariff_url:
+        return ""
+    label = "Подробные условия" if lang == "ru" else "Batafsil shartlar"
+    return f'<a href="{tariff_url}">{label}</a>'
+
+
+def resolve_card_promo_image_path(image_path_rel: str | None) -> Path | None:
+    """Return the first existing path for the card promo image."""
+    if image_path_rel:
+        path = get_absolute_path(image_path_rel)
+        if path.exists():
+            return path
+    bundled_dst = get_absolute_path("card_promo/card_promo.webp")
+    if bundled_dst.exists():
+        return bundled_dst
+    if _BUNDLED_CARD_PROMO.exists():
+        return _BUNDLED_CARD_PROMO
+    return None
+
+
+def build_tracking_url(delivery_id: str) -> str:
+    """Build the redirect URL used for order-button click tracking."""
+    base = get_settings().webhook_base_url.rstrip("/")
+    return f"{base}/r/card-order/{delivery_id}"
+
+
+async def create_delivery(
+    session: AsyncSession,
+    user_id: int,
+    source: str,
+    language: str,
+) -> CardPromoDelivery:
+    """Create a delivery record before sending the promo message."""
+    delivery = CardPromoDelivery(
+        user_id=user_id,
+        source=source,
+        language=language,
+    )
+    session.add(delivery)
+    await session.flush()
+    return delivery
+
+
+async def send_card_promo_to_user(
+    bot: Bot,
+    user: User,
+    session: AsyncSession,
+    *,
+    source: str,
+    respect_enabled: bool = True,
+) -> CardPromoDelivery | None:
+    """
+    Send the card promo photo message to one user and record delivery.
+
+    Returns the delivery record on success, None if skipped or failed.
+    """
+    if respect_enabled and await settings_service.get(session, "card_promo_enabled") != "1":
+        return None
+
+    lang = user.language.value if user.language else "ru"
+    caption_raw = await settings_service.get_text(session, "msg_card_promo", lang)
+    if not caption_raw:
+        return None
+
+    tariff_url = await settings_service.get(session, "card_promo_tariff_url") or ""
+    caption = caption_raw.replace("{tariff_link}", format_tariff_link(tariff_url, lang))
+
+    order_url = await settings_service.get(session, "card_promo_order_url") or ""
+    if not order_url:
+        logger.warning("card_promo_order_url is not configured — skipping card promo")
+        return None
+
+    button_label = await settings_service.get_text(session, "btn_card_promo", lang)
+    if not button_label:
+        button_label = "Заказать карту" if lang == "ru" else "Kartaga buyurtma berish"
+
+    image_path_rel = await settings_service.get(session, "card_promo_image_path")
+    image_path = resolve_card_promo_image_path(image_path_rel)
+    if image_path is None:
+        logger.warning("Card promo image not found — skipping card promo")
+        return None
+
+    delivery = await create_delivery(session, user.id, source, lang)
+    tracking_url = build_tracking_url(delivery.id)
+
+    await bot.send_photo(
+        chat_id=user.telegram_id,
+        photo=FSInputFile(str(image_path)),
+        caption=caption,
+        reply_markup=card_promo_keyboard(tracking_url, button_label),
+    )
+    return delivery
+
+
+async def record_click(session: AsyncSession, delivery_id: str) -> None:
+    """Record the first click on an order button (idempotent)."""
+    delivery = await session.get(CardPromoDelivery, delivery_id)
+    if delivery is not None and delivery.clicked_at is None:
+        delivery.clicked_at = datetime.now(timezone.utc)
+        await session.commit()
+
+
+async def get_order_redirect_url(session: AsyncSession) -> str:
+    """Return the configured bank app order URL (fallback if empty)."""
+    url = await settings_service.get(session, "card_promo_order_url") or ""
+    return url or "https://app.tbcbank.uz/SfqR/hzztbuhk"
+
+
+async def _count_for_source(
+    session: AsyncSession,
+    source: str,
+    *,
+    clicked_only: bool = False,
+) -> int:
+    query = select(func.count(CardPromoDelivery.id)).where(
+        CardPromoDelivery.source == source
+    )
+    if clicked_only:
+        query = query.where(CardPromoDelivery.clicked_at.isnot(None))
+    return (await session.execute(query)).scalar_one()
+
+
+async def get_stats(session: AsyncSession) -> PromoStats:
+    """Aggregate delivery and click counts by source."""
+    flow_sent = await _count_for_source(session, CardPromoSource.FLOW)
+    flow_clicked = await _count_for_source(session, CardPromoSource.FLOW, clicked_only=True)
+    bc_sent = await _count_for_source(session, CardPromoSource.BROADCAST)
+    bc_clicked = await _count_for_source(session, CardPromoSource.BROADCAST, clicked_only=True)
+    return PromoStats(
+        flow=SourceStats(sent=flow_sent, clicked=flow_clicked),
+        broadcast=SourceStats(sent=bc_sent, clicked=bc_clicked),
+    )
+
+
+async def get_recent_deliveries(
+    session: AsyncSession,
+    limit: int = 50,
+) -> list[CardPromoDelivery]:
+    """Return recent deliveries with user loaded."""
+    result = await session.execute(
+        select(CardPromoDelivery)
+        .options(selectinload(CardPromoDelivery.user))
+        .order_by(CardPromoDelivery.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def _blocked_usernames(session: AsyncSession) -> set[str]:
+    result = await session.execute(select(BlockedUser.username))
+    return {row[0] for row in result.all()}
+
+
+async def count_broadcast_recipients(session: AsyncSession, language: str) -> int:
+    """Count users eligible for a language-specific broadcast."""
+    lang_enum = Language.RU if language == "ru" else Language.UZ
+    blocked = await _blocked_usernames(session)
+    result = await session.execute(
+        select(User).where(User.language == lang_enum)
+    )
+    users = result.scalars().all()
+    return sum(
+        1 for u in users
+        if not u.telegram_username or u.telegram_username.lower().lstrip("@") not in blocked
+    )
+
+
+async def broadcast_card_promo(
+    session_factory: async_sessionmaker[AsyncSession],
+    bot: Bot,
+    language: str,
+) -> None:
+    """
+    Send card promo to all users with the given language in the background.
+
+    Uses its own DB sessions per batch; does not touch user FSM state.
+    """
+    lang_enum = Language.RU if language == "ru" else Language.UZ
+    sent = 0
+    failed = 0
+    skipped = 0
+
+    async with session_factory() as session:
+        blocked = await _blocked_usernames(session)
+        result = await session.execute(
+            select(User).where(User.language == lang_enum)
+        )
+        users = list(result.scalars().all())
+
+    for user in users:
+        if user.telegram_username:
+            normalized = user.telegram_username.lower().lstrip("@")
+            if normalized in blocked:
+                skipped += 1
+                continue
+
+        try:
+            async with session_factory() as session:
+                delivery = await send_card_promo_to_user(
+                    bot,
+                    user,
+                    session,
+                    source=CardPromoSource.BROADCAST,
+                    respect_enabled=False,
+                )
+                if delivery is None:
+                    skipped += 1
+                else:
+                    await session.commit()
+                    sent += 1
+        except Exception:
+            logger.exception(
+                "Card promo broadcast failed for user telegram_id=%d",
+                user.telegram_id,
+            )
+            failed += 1
+
+        await asyncio.sleep(_BROADCAST_DELAY_SEC)
+
+    logger.info(
+        "Card promo broadcast (%s) finished: sent=%d failed=%d skipped=%d",
+        language,
+        sent,
+        failed,
+        skipped,
+    )

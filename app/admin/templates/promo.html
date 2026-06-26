@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Promo — TBC Admin{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4">Card Promo</h4>
+
+{% if broadcast_started %}
+<div class="alert alert-info py-2">
+  <i class="bi bi-broadcast me-1"></i>
+  Broadcast to <strong>{% if broadcast_lang == 'ru' %}Russian{% else %}Uzbek{% endif %}</strong> users started in the background.
+  Refresh this page in a minute to see updated statistics.
+</div>
+{% endif %}
+
+{% if request.query_params.get('error') == 'no_bot' %}
+<div class="alert alert-danger py-2">Bot is not initialized. Cannot start broadcast.</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+  <!-- Stats cards -->
+  <div class="col-md-4">
+    <div class="card stat-card primary h-100">
+      <div class="card-body">
+        <div class="text-muted small">Total sent</div>
+        <div class="fs-3 fw-bold">{{ stats.total.sent }}</div>
+        <div class="small text-muted mt-1">
+          Flow: {{ stats.flow.sent }} · Broadcast: {{ stats.broadcast.sent }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card success h-100">
+      <div class="card-body">
+        <div class="text-muted small">Total clicked «Order card»</div>
+        <div class="fs-3 fw-bold">{{ stats.total.clicked }}</div>
+        <div class="small text-muted mt-1">
+          Flow: {{ stats.flow.clicked }} · Broadcast: {{ stats.broadcast.clicked }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card warning h-100">
+      <div class="card-body">
+        <div class="text-muted small">Click-through rate (total)</div>
+        <div class="fs-3 fw-bold">{{ stats.total.ctr }}%</div>
+        <div class="small text-muted mt-1">
+          Flow: {{ stats.flow.ctr }}% · Broadcast: {{ stats.broadcast.ctr }}%
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <!-- Broadcast -->
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Broadcast</div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Sends the same card promo message (photo + caption + button) as in the normal bot flow.
+          Recipients: all users with the selected language. Blocked users are excluded.
+          Edit text, image, and URLs in <a href="/admin/settings?tab=media">Settings → Media</a>.
+        </p>
+        {% if not promo_enabled %}
+        <div class="alert alert-warning py-2 small mb-3">
+          Automatic promo after approval is disabled in Settings, but broadcast still works.
+        </div>
+        {% endif %}
+        <div class="d-flex flex-wrap gap-2">
+          <form method="post" action="/admin/promo/broadcast/ru"
+                onsubmit="return confirm('Send card promo to {{ ru_count }} Russian users?');">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-send me-1"></i>Send to Russian ({{ ru_count }})
+            </button>
+          </form>
+          <form method="post" action="/admin/promo/broadcast/uz"
+                onsubmit="return confirm('Send card promo to {{ uz_count }} Uzbek users?');">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-send me-1"></i>Send to Uzbek ({{ uz_count }})
+            </button>
+          </form>
+        </div>
+        <div class="form-text mt-2">
+          Runs in the background (~25 msg/sec). The bot keeps working for other users.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Current promo preview</div>
+      <div class="card-body">
+        {% if preview_image_url %}
+        <img src="{{ preview_image_url }}" alt="Card promo" class="img-thumbnail mb-3" style="max-height:140px;">
+        {% else %}
+        <p class="text-muted small">No promo image configured.</p>
+        {% endif %}
+        <div class="small">
+          <div class="fw-semibold mb-1">🇷🇺 Caption (RU)</div>
+          <pre class="bg-light p-2 rounded small mb-2" style="white-space:pre-wrap;">{{ caption_ru }}</pre>
+          <div class="fw-semibold mb-1">🇺🇿 Caption (UZ)</div>
+          <pre class="bg-light p-2 rounded small" style="white-space:pre-wrap;">{{ caption_uz }}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent deliveries -->
+<div class="card">
+  <div class="card-header fw-semibold">Recent deliveries (last 50)</div>
+  <div class="card-body p-0">
+    {% if recent %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-3">User</th>
+            <th>Lang</th>
+            <th>Source</th>
+            <th>Sent</th>
+            <th>Clicked</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in recent %}
+          <tr>
+            <td class="ps-3">
+              {% if d.user and d.user.telegram_username %}
+              @{{ d.user.telegram_username }}
+              {% elif d.user %}
+              ID {{ d.user.telegram_id }}
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>{{ d.language | upper }}</td>
+            <td>
+              {% if d.source == 'flow' %}
+              <span class="badge bg-secondary">Bot flow</span>
+              {% else %}
+              <span class="badge bg-primary">Broadcast</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ d.created_at.strftime('%Y-%m-%d %H:%M UTC') if d.created_at else '—' }}</td>
+            <td>
+              {% if d.clicked_at %}
+              <span class="text-success"><i class="bi bi-check-circle"></i> Yes</span>
+              {% else %}
+              <span class="text-muted">No</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-muted p-3 small">No deliveries recorded yet.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -69,10 +69,10 @@ def skip_keyboard(lang: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def card_promo_keyboard(order_url: str, button_label: str) -> InlineKeyboardMarkup:
-    """URL button for the TBC Salom Visa card order link."""
+def card_promo_keyboard(tracking_url: str, button_label: str) -> InlineKeyboardMarkup:
+    """URL button for card order — uses tracking redirect URL."""
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text=button_label, url=order_url))
+    builder.row(InlineKeyboardButton(text=button_label, url=tracking_url))
     return builder.as_markup()
 
 
