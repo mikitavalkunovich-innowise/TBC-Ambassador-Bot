@@ -2,7 +2,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from app.services.card_promo_service import (
     get_recent_deliveries,
     get_stats,
     resolve_card_promo_image_path,
+    send_card_promo_test,
 )
 
 router = APIRouter()
@@ -59,6 +60,10 @@ async def promo_page(
             "promo_enabled": promo_enabled,
             "broadcast_started": request.query_params.get("broadcast_started"),
             "broadcast_lang": request.query_params.get("lang"),
+            "test_sent": request.query_params.get("test_sent"),
+            "test_lang": request.query_params.get("test_lang"),
+            "test_telegram_id": request.query_params.get("telegram_id", ""),
+            "test_error": request.query_params.get("test_error"),
         },
     )
 
@@ -93,3 +98,84 @@ async def broadcast_uz(
     _admin: str = Depends(get_current_admin),
 ) -> RedirectResponse:
     return _start_broadcast(request, "uz")
+
+
+def _test_redirect(
+    *,
+    telegram_id: str,
+    test_sent: bool = False,
+    test_lang: str | None = None,
+    test_error: str | None = None,
+) -> RedirectResponse:
+    params = [f"telegram_id={telegram_id}"]
+    if test_sent:
+        params.append("test_sent=1")
+        if test_lang:
+            params.append(f"test_lang={test_lang}")
+    if test_error:
+        params.append(f"test_error={test_error}")
+    return RedirectResponse(f"/admin/promo?{'&'.join(params)}", status_code=303)
+
+
+async def _send_test_promo(
+    request: Request,
+    session: AsyncSession,
+    language: str,
+    telegram_id_raw: str,
+) -> RedirectResponse:
+    bot = getattr(request.app.state, "bot", None)
+    if bot is None:
+        return _test_redirect(telegram_id=telegram_id_raw, test_error="no_bot")
+
+    raw = telegram_id_raw.strip()
+    if not raw:
+        return _test_redirect(telegram_id="", test_error="missing_id")
+
+    try:
+        telegram_id = int(raw)
+    except ValueError:
+        return _test_redirect(telegram_id=raw, test_error="invalid_id")
+
+    try:
+        await send_card_promo_test(bot, session, telegram_id, language)
+        await session.commit()
+    except ValueError as exc:
+        await session.rollback()
+        return _test_redirect(
+            telegram_id=str(telegram_id),
+            test_error=str(exc),
+        )
+    except Exception:
+        await session.rollback()
+        logger.exception("Card promo test send failed for telegram_id=%d", telegram_id)
+        return _test_redirect(
+            telegram_id=str(telegram_id),
+            test_error="send_failed",
+        )
+
+    logger.info("Card promo test (%s) sent to telegram_id=%d", language, telegram_id)
+    return _test_redirect(
+        telegram_id=str(telegram_id),
+        test_sent=True,
+        test_lang=language,
+    )
+
+
+@router.post("/test/ru", response_model=None)
+async def test_ru(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+    telegram_id: str = Form(""),
+) -> RedirectResponse:
+    return await _send_test_promo(request, session, "ru", telegram_id)
+
+
+@router.post("/test/uz", response_model=None)
+async def test_uz(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _admin: str = Depends(get_current_admin),
+    telegram_id: str = Form(""),
+) -> RedirectResponse:
+    return await _send_test_promo(request, session, "uz", telegram_id)

@@ -104,6 +104,7 @@ async def send_card_promo_to_user(
     *,
     source: str,
     respect_enabled: bool = True,
+    language_override: str | None = None,
 ) -> CardPromoDelivery | None:
     """
     Send the card promo photo message to one user and record delivery.
@@ -113,7 +114,7 @@ async def send_card_promo_to_user(
     if respect_enabled and await settings_service.get(session, "card_promo_enabled") != "1":
         return None
 
-    lang = user.language.value if user.language else "ru"
+    lang = language_override or (user.language.value if user.language else "ru")
     caption_raw = await settings_service.get_text(session, "msg_card_promo", lang)
     if not caption_raw:
         return None
@@ -139,12 +140,17 @@ async def send_card_promo_to_user(
     delivery = await create_delivery(session, user.id, source, lang)
     tracking_url = build_tracking_url(delivery.id)
 
-    await bot.send_photo(
-        chat_id=user.telegram_id,
-        photo=FSInputFile(str(image_path)),
-        caption=caption,
-        reply_markup=card_promo_keyboard(tracking_url, button_label),
-    )
+    try:
+        await bot.send_photo(
+            chat_id=user.telegram_id,
+            photo=FSInputFile(str(image_path)),
+            caption=caption,
+            reply_markup=card_promo_keyboard(tracking_url, button_label),
+        )
+    except Exception:
+        await session.delete(delivery)
+        await session.flush()
+        raise
     return delivery
 
 
@@ -205,6 +211,45 @@ async def get_recent_deliveries(
 async def _blocked_usernames(session: AsyncSession) -> set[str]:
     result = await session.execute(select(BlockedUser.username))
     return {row[0] for row in result.all()}
+
+
+async def get_user_by_telegram_id(
+    session: AsyncSession,
+    telegram_id: int,
+) -> User | None:
+    """Return a user by Telegram ID, or None if not registered."""
+    result = await session.execute(
+        select(User).where(User.telegram_id == telegram_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def send_card_promo_test(
+    bot: Bot,
+    session: AsyncSession,
+    telegram_id: int,
+    language: str,
+) -> CardPromoDelivery | None:
+    """
+    Send a single test promo to one user with an explicit language variant.
+
+    Raises ValueError if the user is not registered in the bot.
+    """
+    user = await get_user_by_telegram_id(session, telegram_id)
+    if user is None:
+        raise ValueError("user_not_found")
+
+    delivery = await send_card_promo_to_user(
+        bot,
+        user,
+        session,
+        source=CardPromoSource.TEST,
+        respect_enabled=False,
+        language_override=language,
+    )
+    if delivery is None:
+        raise ValueError("promo_not_configured")
+    return delivery
 
 
 async def count_broadcast_recipients(session: AsyncSession, language: str) -> int:

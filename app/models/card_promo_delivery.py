@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 class CardPromoSource:
     FLOW = "flow"
     BROADCAST = "broadcast"
+    TEST = "test"
 
 
 class CardPromoDelivery(Base, TimestampMixin):

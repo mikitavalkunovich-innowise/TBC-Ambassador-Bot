@@ -15,6 +15,34 @@
 <div class="alert alert-danger py-2">Bot is not initialized. Cannot start broadcast.</div>
 {% endif %}
 
+{% if test_sent %}
+<div class="alert alert-success py-2">
+  <i class="bi bi-check-circle me-1"></i>
+  Test promo ({% if test_lang == 'ru' %}Russian{% else %}Uzbek{% endif %}) sent to Telegram ID <strong>{{ test_telegram_id }}</strong>.
+  Check the bot and the table below for click tracking.
+</div>
+{% endif %}
+
+{% if test_error %}
+<div class="alert alert-danger py-2">
+  {% if test_error == 'missing_id' %}
+  Enter your Telegram user ID to send a test.
+  {% elif test_error == 'invalid_id' %}
+  Telegram user ID must be a number.
+  {% elif test_error == 'user_not_found' %}
+  User with Telegram ID <strong>{{ test_telegram_id }}</strong> not found. They must start the bot at least once.
+  {% elif test_error == 'promo_not_configured' %}
+  Promo is not fully configured (text, image, or order URL missing). Check Settings → Media.
+  {% elif test_error == 'no_bot' %}
+  Bot is not initialized. Cannot send test.
+  {% elif test_error == 'send_failed' %}
+  Failed to send test promo to Telegram ID <strong>{{ test_telegram_id }}</strong>. Check server logs.
+  {% else %}
+  Test send failed: {{ test_error }}
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="row g-4 mb-4">
   <!-- Stats cards -->
   <div class="col-md-4">
@@ -53,6 +81,45 @@
 </div>
 
 <div class="row g-4 mb-4">
+  <!-- Test send -->
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Send test to yourself</div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Send one promo message to a single Telegram user ID before broadcasting.
+          Use your numeric Telegram ID (not @username). The language variant is chosen below —
+          independent of the user's language in the bot.
+        </p>
+        <form method="post" class="mb-2">
+          <label for="test-telegram-id" class="form-label small fw-semibold">Telegram user ID</label>
+          <input type="number"
+                 id="test-telegram-id"
+                 name="telegram_id"
+                 class="form-control form-control-sm mb-3"
+                 placeholder="e.g. 123456789"
+                 value="{{ test_telegram_id }}"
+                 required>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="submit"
+                    formaction="/admin/promo/test/ru"
+                    class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-send me-1"></i>Send test (Russian)
+            </button>
+            <button type="submit"
+                    formaction="/admin/promo/test/uz"
+                    class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-send me-1"></i>Send test (Uzbek)
+            </button>
+          </div>
+        </form>
+        <div class="form-text">
+          Recorded as source «Test» in the table below. Not included in broadcast statistics.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Broadcast -->
   <div class="col-lg-6">
     <div class="card h-100">
@@ -142,6 +209,8 @@
             <td>
               {% if d.source == 'flow' %}
               <span class="badge bg-secondary">Bot flow</span>
+              {% elif d.source == 'test' %}
+              <span class="badge bg-info text-dark">Test</span>
               {% else %}
               <span class="badge bg-primary">Broadcast</span>
               {% endif %}
